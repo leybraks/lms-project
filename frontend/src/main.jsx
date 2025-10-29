@@ -7,19 +7,22 @@ import App from './App.jsx'
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 
+import { AuthProvider } from './context/AuthContext';
+import { BrowserRouter } from 'react-router-dom';
+import { theme } from './theme';
 // 2. Crea un tema básico (lo personalizaremos después)
-const theme = createTheme({
-  palette: {
-    mode: 'dark', // Puedes cambiarlo a 'dark'
-  },
-});
+
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     {/* 3. Envuelve tu App con los proveedores */}
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <App />
+      <BrowserRouter>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </BrowserRouter>
     </ThemeProvider>
   </React.StrictMode>,
 )
