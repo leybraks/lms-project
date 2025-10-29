@@ -1,53 +1,94 @@
 // frontend/src/theme.js
+
 import { createTheme } from '@mui/material/styles';
 
-// Este es el "panel de control" de todo tu diseño.
+// Definición del color púrpura moderno para dark mode
+const PURPLE_ACCENT = '#BB86FC';
+const TEAL_ACCENT = '#03DAC6';
+
 export const theme = createTheme({
   palette: {
-    mode: 'dark', // Mantenemos el modo oscuro
+    mode: 'dark', 
     
-    // Define tu color primario (para botones, links, etc.)
+    // 1. Color Primario: Cambiado a púrpura para contraste moderno
     primary: {
-      main: '#3f51b5', // Un azul índigo clásico
+      main: PURPLE_ACCENT, 
     },
     
-    // Define tu color secundario
+    // 2. Color Secundario: Verde azulado, excelente acento en dark mode
     secondary: {
-      main: '#f50057', // Un rosa para acentos
+      main: TEAL_ACCENT, 
     },
     
-    // --- Esta es la parte clave ---
-    // Define los colores de fondo
+    // 3. Colores de Fondo: Negros profundos para el look de dashboard
     background: {
-      default: '#121212', // El fondo principal de la página (un negro suave)
-      paper: '#1e1e1e', // El fondo de los componentes (Tarjetas, Menú, AppBar)
+      default: '#121212', 
+      paper: '#1e1e1e', // Para Cards, Drawer y AppBar
     },
     
-    // Opcional: Ajustar el texto
+    // 4. Texto: Gris claro y gris suave
     text: {
-      primary: '#e0e0e0', // Un gris claro en lugar de blanco puro
-      secondary: '#b0b0b0', // Para texto más suave
+      primary: '#e0e0e0',
+      secondary: '#b0b0b0', 
     },
+    
+    // Opcional: Ajuste de colores de acción (botones, hover)
+    action: {
+        active: PURPLE_ACCENT, // Color activo
+        hover: 'rgba(187, 134, 252, 0.08)', // Hover sutil en la barra lateral
+    }
   },
   
-  // Opcional: Sobrescribir estilos de componentes
+  // 5. Sobrescribir estilos de componentes (Máximo Contraste y Esquinas Redondeadas)
   components: {
-    // Ejemplo: hacer que todas las 'Cards' tengan un borde
+    // Tarjetas de Curso (MuiCard)
     MuiCard: {
       styleOverrides: {
         root: {
-          border: '1px solid #333', // Un borde sutil
+          border: '1px solid #333',
+          borderRadius: 8, // Bordes redondeados sutiles
         },
       },
     },
-    // Ejemplo: hacer que el AppBar sea más oscuro
+    
+    // Barra Superior (MuiAppBar)
     MuiAppBar: {
       styleOverrides: {
         root: {
-          backgroundColor: '#1e1e1e', // Mismo color que el 'paper'
+          backgroundColor: '#1e1e1e', 
           borderBottom: '1px solid #333',
+          boxShadow: 'none', // Quitamos la sombra para un look plano
         },
       },
     },
+
+    // Componentes de Lista/Menú (MuiListItemButton)
+    MuiListItemButton: {
+        styleOverrides: {
+            root: {
+                borderRadius: 6, // Bordes redondeados para los ítems del menú
+                marginBottom: 4,
+                '&.Mui-selected': {
+                    backgroundColor: 'rgba(187, 134, 252, 0.15)', // Fondo claro de Primary al seleccionar
+                },
+                '&:hover': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)', // Hover suave
+                },
+            },
+        },
+    },
+    
+    // Botones de Enfoque (Para un look más limpio)
+    MuiButton: {
+        defaultProps: {
+            disableElevation: true, // Quitamos la sombra por defecto
+        },
+        styleOverrides: {
+            root: {
+                textTransform: 'none',
+                borderRadius: 8, // Bordes redondeados
+            }
+        }
+    }
   },
 });

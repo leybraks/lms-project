@@ -2,22 +2,21 @@
 
 import axios from 'axios';
 
-// 1. Define la URL base de tu API de Django
-const API_BASE_URL = 'http://127.0.0.1:8000/api/';
+// La URL base de la API sigue siendo la misma
+const API_BASE_URL = 'http://127.0.0.1:8000/';
 
-// 2. Crea una "instancia" de axios pre-configurada
 let apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
+// El interceptor para enviar el token no cambia
 apiClient.interceptors.request.use(
   (config) => {
-    // Obtiene el token de localStorage
     const token = localStorage.getItem('accessToken');
     if (token) {
-      // Si el token existe, lo añade a la cabecera 'Authorization'
       config.headers['Authorization'] = `Bearer ${token}`;
     }
     return config;
@@ -26,22 +25,46 @@ apiClient.interceptors.request.use(
     return Promise.reject(error);
   }
 );
-// 3. Exporta un objeto con todos tus "endpoints"
-// Por ahora, solo tenemos uno:
+
 export const api = {
+  // --- Rutas de Cursos (sin cambios) ---
   getCourses: () => {
-    return apiClient.get('courses/');
+    return apiClient.get('api/courses/');
   },
   getCourseDetail: (id) => {
-    return apiClient.get(`courses/${id}/`);
+    return apiClient.get(`api/courses/${id}/`);
   },
-  login: (credentials) => {
-    // Nota: SimpleJWT usa 'username', no 'email', por defecto.
-    // Usaremos el 'username' del superuser.
-    return apiClient.post('token/', credentials);
-  },
-  getMe: () => {
-    return apiClient.get('me/');
-  }
 
+  // --- RUTAS DE AUTENTICACIÓN (MODIFICADAS) ---
+  
+  /**
+   * @param {object} credentials - { username, password }
+   * dj-rest-auth usa /api/auth/login/ y devuelve los tokens
+   */
+  login: (credentials) => {
+    return apiClient.post('api/auth/login/', credentials);
+  },
+
+  /**
+   * dj-rest-auth usa /api/auth/logout/
+   */
+  logout: () => {
+    return apiClient.post('api/auth/logout/');
+  },
+  
+  /**
+   * @param {object} userData - { username, email, password, password2 }
+   * dj-rest-auth usa /api/auth/registration/
+   */
+  register: (userData) => {
+    return apiClient.post('api/auth/registration/', userData);
+  },
+
+  /**
+   * dj-rest-auth usa /api/auth/user/ para obtener datos del usuario
+   * (reemplaza nuestro antiguo /api/me/)
+   */
+  getMe: () => {
+    return apiClient.get('api/auth/user/');
+  }
 };

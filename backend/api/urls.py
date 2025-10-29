@@ -1,27 +1,25 @@
 # backend/api/urls.py
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from .views import CourseViewSet, get_me_view
 
-# --- 1. IMPORTA LAS VISTAS DE JWT ---
-from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
-    TokenRefreshView,
-)
+from django.urls import path
+# ¡ESTA ES LA IMPORTACIÓN CORREGIDA!
+# Usamos los nombres exactos definidos en api/views.py
+from .views import (
+    ListaDeCursosView, 
+    DetalleDeCursoView, 
+    EnrollmentCreateView, 
+    MyEnrollmentListView,
+    get_me_view # Importamos esta también, ya que existe en views.py
+) 
 
-router = DefaultRouter()
-router.register(r'courses', CourseViewSet, basename='course')
-
-# Modifica tus urlpatterns
 urlpatterns = [
-    # Rutas que ya teníamos (para los cursos)
-    path('', include(router.urls)),
+    # Rutas de Cursos (usan las vistas corregidas)
+    path('courses/', ListaDeCursosView.as_view(), name='course-list'),
+    path('courses/<int:pk>/', DetalleDeCursoView.as_view(), name='course-detail'),
     
-    # --- 2. AÑADE ESTAS DOS NUEVAS RUTAS ---
-    # Esta es la ruta de "login":
-    path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    
-    # Esta ruta sirve para "refrescar" un token expirado:
-    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path('me/', get_me_view, name='get_me'),
+    # Rutas de Inscripción
+    path('enroll/', EnrollmentCreateView.as_view(), name='enrollment-create'), 
+    path('enrollments/my_enrollments/', MyEnrollmentListView.as_view(), name='my-enrollments'),
+
+    # Opcional: Ruta para obtener datos del usuario
+    path('users/me/', get_me_view, name='get-me'),
 ]

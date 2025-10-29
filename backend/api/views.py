@@ -1,36 +1,121 @@
 # backend/api/views.py
-from rest_framework import viewsets
-from .models import Course
-from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer
-from rest_framework.permissions import IsAuthenticated
 
+from rest_framework import viewsets, generics, status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+
+from django.shortcuts import get_object_or_404
+
+# Imports de Modelos y Serializers de tu app
+from .models import Course, Enrollment 
+from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer
+
+# ====================================================================
+# 1. Vistas de Cursos
+# ====================================================================
+
 class CourseViewSet(viewsets.ModelViewSet):
     """
-    API endpoint que permite ver o editar cursos.
+    API endpoint para administración de cursos (CRUD).
+    Usado típicamente en rutas de admin o si usas routers.
     """
     queryset = Course.objects.all().order_by('-created_at')
     permission_classes = [IsAuthenticated]
+    
     def get_serializer_class(self):
-        # Si la acción es 'retrieve' (pedir un detalle)...
         if self.action == 'retrieve':
-            # ... usa el serializer de detalle
             return CourseDetailSerializer
         return CourseSerializer
+    
+class ListaDeCursosView(generics.ListAPIView):
+    """
+    Devuelve una lista de todos los cursos (Usado en el Home Page del frontend).
+    """
+    queryset = Course.objects.all()
+    serializer_class = CourseSerializer
+    permission_classes = [IsAuthenticated]
 
-@api_view(['GET']) # Esta vista solo responde a peticiones GET
-@permission_classes([IsAuthenticated]) # Solo usuarios logueados pueden verla
+class DetalleDeCursoView(generics.RetrieveAPIView):
+    """
+    Devuelve el detalle de un curso específico.
+    """
+    queryset = Course.objects.all()
+    serializer_class = CourseDetailSerializer
+    permission_classes = [IsAuthenticated]
+
+# ====================================================================
+# 2. Vistas de Autenticación/Usuario
+# ====================================================================
+
+@api_view(['GET']) 
+@permission_classes([IsAuthenticated]) 
 def get_me_view(request):
     """
-    Devuelve los datos del usuario que está actualmente autenticado.
+    Devuelve los datos del usuario autenticado (Usado en AuthContext para validar token).
     """
-    # 'request.user' es el objeto del usuario que Django obtiene
-    # automáticamente a partir del Token JWT
     user = request.user
-    
-    # Usamos el serializer que acabamos de crear
     serializer = UserSerializer(user)
-    
-    # Devolvemos el JSON
     return Response(serializer.data)
+
+# ====================================================================
+# 3. Vistas de Inscripción (Enrollment)
+# ====================================================================
+
+class EnrollmentCreateView(generics.CreateAPIView):
+    """
+    Permite a un usuario autenticado inscribirse en un curso.
+    """
+    queryset = Enrollment.objects.all()
+    serializer_class = EnrollmentSerializer
+    permission_classes = [IsAuthenticated]
+
+    # Sobrescribimos 'create' para añadir nuestra lógica personalizada
+    def create(self, request, *args, **kwargs):
+        
+        # 1. Validar que 'course_id' fue enviado
+        course_id = request.data.get('course_id')
+        if not course_id:
+            return Response(
+                {"detail": "Se requiere el 'course_id'."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 2. Obtener los objetos (el usuario viene del token)
+        course = get_object_or_404(Course, id=course_id)
+        user = request.user
+
+        # 3. Verificar si el usuario ya está inscrito (409 Conflict)
+        if Enrollment.objects.filter(user=user, course=course).exists():
+            return Response(
+                {"detail": "Ya estás inscrito en este curso."},
+                status=status.HTTP_409_CONFLICT
+            )
+
+        # 4. Validar los datos del request (aunque solo usamos course_id)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # 5. ¡LA SOLUCIÓN!
+        # Inyectamos el 'user' y el 'course' (que son read_only)
+        # directamente en el método .save().
+        serializer.save(user=user, course=course)
+
+        # 6. Respuesta de éxito
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            serializer.data, 
+            status=status.HTTP_201_CREATED, 
+            headers=headers
+        )
+
+class MyEnrollmentListView(generics.ListAPIView):
+    """
+    Muestra todos los cursos en los que el usuario logueado está inscrito (Usado para verificación).
+    """
+    serializer_class = EnrollmentSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Filtra las inscripciones por el usuario que hace la solicitud
+        return Enrollment.objects.filter(user=self.request.user).select_related('course')

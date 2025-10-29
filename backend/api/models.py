@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.conf import settings
 
 # 1. Modelo de Usuario
 class User(AbstractUser):
@@ -78,3 +79,90 @@ class Grade(models.Model):
     score = models.DecimalField(max_digits=5, decimal_places=2) 
     comments = models.TextField(blank=True, null=True)
     graded_at = models.DateTimeField(auto_now=True)
+
+class Enrollment(models.Model):
+    """Modelo para registrar la inscripción de un usuario a un curso."""
+    
+    # Usuario inscrito (relación con el modelo de usuario)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.CASCADE,
+        related_name='enrollments'
+    )
+    
+    # Curso al que se inscribe
+    course = models.ForeignKey(
+        Course, 
+        on_delete=models.CASCADE,
+        related_name='enrollments'
+    )
+    
+    # Fecha de inscripción
+    date_enrolled = models.DateTimeField(auto_now_add=True)
+    
+    # Campo opcional: progreso o estado
+    completed = models.BooleanField(default=False)
+
+    class Meta:
+        # Esto asegura que un usuario solo pueda inscribirse UNA vez al mismo curso
+        unique_together = ('user', 'course')
+        verbose_name = 'Inscripción'
+        verbose_name_plural = 'Inscripciones'
+
+    def __str__(self):
+        return f'{self.user.username} inscrito en {self.course.title}'
+
+# ====================================================================
+# 1. NUEVO MODELO: MÓDULO (El contenedor de lecciones)
+# ====================================================================
+class Module(models.Model):
+    """
+    Un Módulo o "sección" de un curso. 
+    Ej: "Semana 1", "Introducción", "Proyecto Final".
+    """
+    course = models.ForeignKey(
+        Course, 
+        on_delete=models.CASCADE, 
+        related_name='modules' # Permite a un Curso encontrar sus Módulos
+    )
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, null=True)
+    # 'order' nos permite definir el orden (Módulo 1, Módulo 2, etc.)
+    order = models.PositiveIntegerField(default=0) 
+
+    class Meta:
+        ordering = ['order'] # Ordena los módulos por el campo 'order'
+
+    def __str__(self):
+        return f'{self.course.title} - Módulo {self.order}: {self.title}'
+
+
+# ====================================================================
+# 2. NUEVO MODELO: LECCIÓN (El contenido en sí)
+# ====================================================================
+class Lesson(models.Model):
+    """
+    Una Lección individual dentro de un Módulo.
+    Ej: "Video: Variables", "Lectura: Loops".
+    """
+    module = models.ForeignKey(
+        Module, 
+        on_delete=models.CASCADE, 
+        related_name='lessons' # Permite a un Módulo encontrar sus Lecciones
+    )
+    title = models.CharField(max_length=200)
+    # 'order' para el orden de las lecciones dentro del módulo
+    order = models.PositiveIntegerField(default=0) 
+    
+    # El contenido real (puedes expandir esto)
+    # Por ahora, un simple campo de texto.
+    content = models.TextField(blank=True)
+    
+    # Podrías añadir un campo para URL de video (Vimeo, YouTube)
+    video_url = models.URLField(blank=True, null=True)
+
+    class Meta:
+        ordering = ['order'] # Ordena las lecciones
+
+    def __str__(self):
+        return f'{self.module.title} - Lección {self.order}: {self.title}'

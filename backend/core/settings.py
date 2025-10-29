@@ -35,15 +35,23 @@ INSTALLED_APPS = [
     'corsheaders',
     'api',
     'rest_framework',
+    'django.contrib.sites',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'dj_rest_auth',
+    'dj_rest_auth.registration',
 ]
 
 MIDDLEWARE = [
+    'allauth.account.middleware.AccountMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -136,9 +144,70 @@ CORS_ALLOWED_ORIGINS = [
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
     ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated', # Bloquea todo por defecto
+    ),
+}
+
+REST_AUTH = {
+    'USE_JWT': True,
+    'JWT_AUTH_HTTPONLY': False, # Permite que el frontend lea el token
+    'TOKEN_MODEL' : None
 }
 
 SIMPLE_JWT = {
     'AUTH_USER_MODEL': 'api.User', # Le apunta a tu modelo personalizado
 }
+CORS_ALLOW_METHODS = [
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
+]
+
+# ¡ASEGÚRATE DE QUE ESTO ESTÉ CONFIGURADO!
+# Permite las cabeceras que enviamos (Authorization y Content-Type)
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "authorization", # <-- MUY IMPORTANTE
+    "content-type",  # <-- MUY IMPORTANTE
+    "origin",
+    "x-csrftoken",
+    "x-requested-with",
+]
+# backend/core/settings.py
+
+AUTHENTICATION_BACKENDS = [
+    # Needed to login by username in Django admin, regardless of `allauth`
+    'django.contrib.auth.backends.ModelBackend',
+
+    # `allauth` specific authentication methods, such as login by email
+    'allauth.account.auth_backends.AuthenticationBackend',
+]
+
+# backend/core/settings.py
+
+SITE_ID = 1
+
+# Define cómo inician sesión (con 'username' O 'email')
+ACCOUNT_LOGIN_METHODS = {'username', 'email'}
+
+# Define qué campos se piden en el registro
+ACCOUNT_SIGNUP_FIELDS = ['username', 'email*']
+
+# Verificación de Email
+ACCOUNT_EMAIL_VERIFICATION = 'mandatory'       # Asegura que el email se verifique
+ACCOUNT_UNIQUE_EMAIL = True                     # Asegura que los emails no se repitan
+
+# Otras configuraciones
+LOGIN_REDIRECT_URL = '/'
+ACCOUNT_LOGOUT_ON_GET = True
+ACCOUNT_ADAPTER = 'allauth.account.adapter.DefaultAccountAdapter'
+SOCIALACCOUNT_ADAPTER = 'allauth.socialaccount.adapter.DefaultSocialAccountAdapter'
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL = 'http://localhost:5173/login?verified=true'
+ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = 'http://localhost:5173/dashboard?verified=true'

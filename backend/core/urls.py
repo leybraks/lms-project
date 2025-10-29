@@ -1,11 +1,22 @@
-# backend/core/urls.py
+# core/urls.py
+
 from django.contrib import admin
-from django.urls import path, include  # <-- Asegúrate de importar 'include'
+from django.urls import path, include, re_path # <-- ¡ASEGÚRATE QUE 'include' ESTÉ AQUÍ!
+from allauth.account.views import ConfirmEmailView 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     
-    # Añade esta línea:
-    # Conecta las URLs de nuestra 'api' bajo la ruta 'api/'
+    # --- Rutas de Auth (esto ya lo tienes bien) ---
+    path('api/auth/', include('dj_rest_auth.urls')),
+    re_path(
+        r'^api/auth/registration/account-confirm-email/(?P<key>[-:\w]+)/$', 
+        ConfirmEmailView.as_view(),
+        name='account_confirm_email'
+    ),
+    path('api/auth/registration/', include('dj_rest_auth.registration.urls')),
+    
+    # --- ¡ESTA ES LA LÍNEA QUE DEBES AÑADIR/DESCOMENTAR! ---
+    # Esto le dice a Django que busque MÁS rutas en tu app 'api'
     path('api/', include('api.urls')), 
 ]
