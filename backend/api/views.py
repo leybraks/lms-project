@@ -4,12 +4,13 @@ from rest_framework import viewsets, generics, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from .permissions import IsEnrolledPermission
 
 from django.shortcuts import get_object_or_404
 
 # Imports de Modelos y Serializers de tu app
-from .models import Course, Enrollment 
-from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer
+from .models import Course, Enrollment, Lesson, LessonCompletion
+from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer
 
 # ====================================================================
 # 1. Vistas de Cursos
@@ -119,3 +120,70 @@ class MyEnrollmentListView(generics.ListAPIView):
     def get_queryset(self):
         # Filtra las inscripciones por el usuario que hace la solicitud
         return Enrollment.objects.filter(user=self.request.user).select_related('course')
+    
+class LessonDetailView(generics.RetrieveAPIView):
+    """
+    Devuelve el detalle de una lección específica.
+    Ahora SÓLO si el usuario está inscrito en el curso.
+    """
+    queryset = Lesson.objects.all()
+    serializer_class = LessonSerializer
+    # ¡APLICAMOS EL NUEVO PERMISO!
+    # El usuario debe estar autenticado Y TAMBIÉN inscrito
+    permission_classes = [IsAuthenticated, IsEnrolledPermission]
+
+
+    # ====================================================================
+# NUEVA VISTA: Marcar Lección como Completada
+# ====================================================================
+class LessonCompleteView(generics.CreateAPIView):
+    """
+    Permite a un usuario autenticado marcar una lección como completada.
+    """
+    queryset = LessonCompletion.objects.all()
+    serializer_class = LessonCompletionSerializer
+    permission_classes = [IsAuthenticated] # Solo usuarios logueados
+
+    def create(self, request, *args, **kwargs):
+        lesson_id = request.data.get('lesson_id')
+        if not lesson_id:
+            return Response(
+                {"detail": "Se requiere el 'lesson_id'."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        lesson = get_object_or_404(Lesson, id=lesson_id)
+        user = request.user
+
+        # TODO: Verificar si el usuario está inscrito en el curso
+        # (Usando el IsEnrolledPermission que ya creamos)
+
+        # Verificar si ya la completó
+        if LessonCompletion.objects.filter(user=user, lesson=lesson).exists():
+            return Response(
+                {"detail": "Ya has completado esta lección."},
+                status=status.HTTP_409_CONFLICT
+            )
+        
+        # Guardar la finalización
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        # Inyectamos el usuario y la lección (que son read_only)
+        serializer.save(user=user, lesson=lesson) 
+
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    
+# ====================================================================
+# NUEVA VISTA: Mis Lecciones Completadas
+# ====================================================================
+class MyLessonCompletionsListView(generics.ListAPIView):
+    """
+    Muestra todas las lecciones que el usuario logueado ha completado.
+    """
+    serializer_class = LessonCompletionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Filtra las lecciones completadas por el usuario que realiza la solicitud
+        return LessonCompletion.objects.filter(user=self.request.user)

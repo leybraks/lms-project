@@ -8,6 +8,8 @@ from .views import (
     DetalleDeCursoView, 
     EnrollmentCreateView, 
     MyEnrollmentListView,
+    LessonCompleteView,
+    MyLessonCompletionsListView,
     get_me_view # Importamos esta también, ya que existe en views.py
 ) 
 
@@ -22,4 +24,6 @@ urlpatterns = [
 
     # Opcional: Ruta para obtener datos del usuario
     path('users/me/', get_me_view, name='get-me'),
+    path('lessons/complete/', LessonCompleteView.as_view(), name='lesson-complete'),
+    path('completions/my_completions/', MyLessonCompletionsListView.as_view(), name='my-lesson-completions'),
 ]

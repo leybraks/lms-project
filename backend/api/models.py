@@ -166,3 +166,31 @@ class Lesson(models.Model):
 
     def __str__(self):
         return f'{self.module.title} - Lección {self.order}: {self.title}'
+    
+# ====================================================================
+# NUEVO MODELO: PROGRESO (Lección Completada)
+# ====================================================================
+class LessonCompletion(models.Model):
+    """
+    Registra cuándo un usuario completa una lección específica.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='lesson_completions'
+    )
+    lesson = models.ForeignKey(
+        Lesson,
+        on_delete=models.CASCADE,
+        related_name='completions'
+    )
+    date_completed = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Asegura que un usuario solo pueda completar una lección UNA vez
+        unique_together = ('user', 'lesson')
+        verbose_name = 'Lección Completada'
+        verbose_name_plural = 'Lecciones Completadas'
+
+    def __str__(self):
+        return f'{self.user.username} completó {self.lesson.title}'

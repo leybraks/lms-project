@@ -1,6 +1,6 @@
 # backend/api/serializers.py
 from rest_framework import serializers
-from .models import Course, Task, User, Enrollment,Module, Lesson
+from .models import Course, Task, User, Enrollment,Module, Lesson, LessonCompletion
 
 
 # ====================================================================
@@ -65,3 +65,19 @@ class EnrollmentSerializer(serializers.ModelSerializer):
         # Hacemos que 'user' y 'course' sean de solo lectura (read_only)
         # ya que los estableceremos en la vista
         read_only_fields = ['user', 'course']
+
+# ====================================================================
+# NUEVO SERIALIZER: Completar Lección
+# ====================================================================
+class LessonCompletionSerializer(serializers.ModelSerializer):
+    """
+    Serializer para crear un registro de 'Lección Completada'.
+    Solo necesita recibir el ID de la lección.
+    """
+    # Usamos lesson_id solo para la entrada (write_only)
+    lesson_id = serializers.IntegerField(write_only=True)
+
+    class Meta:
+        model = LessonCompletion
+        fields = ['id', 'user', 'lesson', 'date_completed', 'lesson_id']
+        read_only_fields = ['user', 'lesson', 'date_completed']
