@@ -1,13 +1,25 @@
 # backend/api/admin.py
-from django.contrib import admin
-from .models import User, Course, Enrollment, Task, Submission, Grade, Module, Lesson
 
-# Registra todos tus modelos aquí para verlos en el panel
+from django.contrib import admin
+from .models import (
+    User, 
+    Course, 
+    Enrollment, 
+    Module, 
+    Lesson, 
+    LessonCompletion, 
+    Assignment, 
+    Submission, 
+    Grade
+)
+
+# Registramos todos los modelos limpios que definimos en models.py
 admin.site.register(User)
 admin.site.register(Course)
 admin.site.register(Enrollment)
-admin.site.register(Task)
-admin.site.register(Submission)
-admin.site.register(Grade)
 admin.site.register(Module)
 admin.site.register(Lesson)
+admin.site.register(LessonCompletion)
+admin.site.register(Assignment)
+admin.site.register(Submission)
+admin.site.register(Grade)

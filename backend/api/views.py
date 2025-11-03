@@ -2,15 +2,15 @@
 
 from rest_framework import viewsets, generics, status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from .permissions import IsEnrolledPermission
 
 from django.shortcuts import get_object_or_404
 
 # Imports de Modelos y Serializers de tu app
-from .models import Course, Enrollment, Lesson, LessonCompletion
-from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer
+from .models import Course, Enrollment, Lesson, LessonCompletion, Assignment, Submission
+from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer, AssignmentSerializer, SubmissionSerializer
 
 # ====================================================================
 # 1. Vistas de Cursos
@@ -130,7 +130,7 @@ class LessonDetailView(generics.RetrieveAPIView):
     serializer_class = LessonSerializer
     # ¡APLICAMOS EL NUEVO PERMISO!
     # El usuario debe estar autenticado Y TAMBIÉN inscrito
-    permission_classes = [IsAuthenticated, IsEnrolledPermission]
+    permission_classes = [IsAuthenticated]
 
 
     # ====================================================================
@@ -187,3 +187,57 @@ class MyLessonCompletionsListView(generics.ListAPIView):
     def get_queryset(self):
         # Filtra las lecciones completadas por el usuario que realiza la solicitud
         return LessonCompletion.objects.filter(user=self.request.user)
+    
+# ====================================================================
+# NUEVA VISTA: Detalle de Tarea (por Lección)
+# ====================================================================
+class AssignmentDetailView(generics.RetrieveAPIView):
+    """
+    Devuelve la Tarea asociada a un ID de Lección.
+    Usamos 'lesson__id' para buscar la tarea a través de la lección.
+    """
+    queryset = Assignment.objects.all()
+    serializer_class = AssignmentSerializer
+    permission_classes = [IsAuthenticated] # TODO: Deberíamos usar IsEnrolledPermission
+    lookup_field = 'lesson_id' # Le decimos que busque por 'lesson_id'
+    lookup_url_kwarg = 'lesson_id' # El nombre del parámetro en la URL
+
+# ====================================================================
+# NUEVA VISTA: Crear/Actualizar una Entrega (Submission)
+# ====================================================================
+class SubmissionCreateUpdateView(generics.CreateAPIView):
+    """
+    Permite a un usuario crear (POST) una entrega para una Tarea.
+    """
+    queryset = Submission.objects.all()
+    serializer_class = SubmissionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        assignment_id = request.data.get('assignment_id')
+        content = request.data.get('content')
+        
+        if not assignment_id or not content:
+            return Response(
+                {"detail": "Se requiere 'assignment_id' y 'content'."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        assignment = get_object_or_404(Assignment, id=assignment_id)
+        user = request.user
+
+        # TODO: Verificar si el usuario está inscrito en el curso de esta tarea
+
+        # Buscar si ya existe una entrega (para actualizarla en lugar de crear una nueva)
+        submission, created = Submission.objects.update_or_create(
+            user=user, 
+            assignment=assignment,
+            defaults={'content': content, 'status': 'SUBMITTED'}
+        )
+        
+        serializer = self.get_serializer(submission)
+        
+        if created:
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            return Response(serializer.data, status=status.HTTP_200_OK)

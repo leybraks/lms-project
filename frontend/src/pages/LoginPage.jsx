@@ -84,16 +84,15 @@ function LoginPage() {
     }
 
     try {
-      // 2. Preparar los datos para dj-rest-auth
+      // 2. Preparar los datos (Esto está correcto)
       const userData = {
         username: registerUsername,
         email: registerEmail,
-        password: registerPassword,
-        password2: registerConfirmPassword // dj-rest-auth espera 'password2'
+        password1: registerPassword,
+        password2: registerConfirmPassword
       };
 
-      // 3. Llamar a la API de registro (usando axiosInstance)
-      // La URL por defecto de dj-rest-auth es /api/auth/registration/
+      // 3. Llamar a la API de registro
       await axiosInstance.post('/api/auth/registration/', userData);
       
       // 4. ¡Éxito!
@@ -108,13 +107,20 @@ function LoginPage() {
       setIsRegistering(false); 
 
     } catch (err) {
-      // 6. Manejar errores de la API
+      // 6. ¡MANEJO DE ERRORES CORREGIDO!
       console.error("Error en el registro:", err.response.data);
       const data = err.response.data;
+      
       if (data.username) {
         setRegisterError(`Usuario: ${data.username[0]}`);
       } else if (data.email) {
         setRegisterError(`Email: ${data.email[0]}`);
+      } else if (data.password1) { // <-- Arreglado
+        setRegisterError(`Contraseña: ${data.password1[0]}`);
+      } else if (data.password2) { // <-- Arreglado
+        setRegisterError(`Repetir Contraseña: ${data.password2[0]}`);
+      } else if (data.password) { // <-- Por si acaso
+        setRegisterError(`Contraseña: ${data.password[0]}`);
       } else {
         setRegisterError('Error al registrarse. Inténtalo de nuevo.');
       }

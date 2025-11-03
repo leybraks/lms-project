@@ -1,83 +1,96 @@
 # backend/api/serializers.py
+
 from rest_framework import serializers
-from .models import Course, Task, User, Enrollment,Module, Lesson, LessonCompletion
+from .models import (
+    User, 
+    Course, 
+    Enrollment, 
+    Module, 
+    Lesson, 
+    LessonCompletion, 
+    Assignment, 
+    Submission, 
+    Grade
+)
 
+# 1. Serializer de Usuario (Básico)
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'role']
 
-# ====================================================================
-# 1. NUEVO: Serializer para Lecciones (El más interno)
-# ====================================================================
+# 2. Serializer de Lección (El más interno)
 class LessonSerializer(serializers.ModelSerializer):
     class Meta:
         model = Lesson
         fields = ['id', 'title', 'order', 'content', 'video_url']
 
-
-# ====================================================================
-# 2. NUEVO: Serializer para Módulos (Que anida Lecciones)
-# ====================================================================
+# 3. Serializer de Módulo (Anida Lecciones)
 class ModuleSerializer(serializers.ModelSerializer):
-    # 'lessons' es el 'related_name' que definimos en el modelo Lesson
-    # Esto anidará la lista de lecciones dentro de cada módulo
     lessons = LessonSerializer(many=True, read_only=True)
 
     class Meta:
         model = Module
         fields = ['id', 'title', 'description', 'order', 'lessons']
 
-
+# 4. Serializer de Curso (Para la lista)
 class CourseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Course
-        # Define los campos del modelo que quieres exponer en la API
-        fields = ['id', 'title', 'description', 'professor', 'aforo_max']
+        fields = ['id', 'title', 'description', 'created_at']
 
-class TaskSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Task
-        # Define los campos que quieres mostrar para cada tarea
-        fields = ['id', 'title', 'description', 'due_date', 'task_type']
-
+# 5. Serializer de Detalle de Curso (Anida Módulos)
 class CourseDetailSerializer(serializers.ModelSerializer):
-    # 'modules' es el 'related_name' que definimos en el modelo Module
-    # Esto anidará la lista de módulos (que a su vez anidan lecciones)
     modules = ModuleSerializer(many=True, read_only=True)
 
     class Meta:
         model = Course
-        # Incluimos 'modules' en los campos que devuelve la API
         fields = ['id', 'title', 'description', 'created_at', 'modules']
 
-class UserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ['id', 'username', 'email', 'role']
-
+# 6. Serializer de Inscripción (Enrollment)
 class EnrollmentSerializer(serializers.ModelSerializer):
-    """Serializer para la creación y visualización de inscripciones."""
-    
-    # Solo necesitamos enviar el ID del curso al inscribirse
     course_id = serializers.IntegerField(write_only=True)
+    # Anidar el objeto curso para dar más contexto
+    course = CourseSerializer(read_only=True) 
 
     class Meta:
         model = Enrollment
-        # Los campos que se mostrarán al usuario
         fields = ['id', 'user', 'course', 'date_enrolled', 'completed', 'course_id']
-        # Hacemos que 'user' y 'course' sean de solo lectura (read_only)
-        # ya que los estableceremos en la vista
-        read_only_fields = ['user', 'course']
+        read_only_fields = ['user']
 
-# ====================================================================
-# NUEVO SERIALIZER: Completar Lección
-# ====================================================================
+# 7. Serializer de Completar Lección
 class LessonCompletionSerializer(serializers.ModelSerializer):
-    """
-    Serializer para crear un registro de 'Lección Completada'.
-    Solo necesita recibir el ID de la lección.
-    """
-    # Usamos lesson_id solo para la entrada (write_only)
     lesson_id = serializers.IntegerField(write_only=True)
+    # Anidar la lección para más contexto
+    lesson = LessonSerializer(read_only=True)
 
     class Meta:
         model = LessonCompletion
         fields = ['id', 'user', 'lesson', 'date_completed', 'lesson_id']
-        read_only_fields = ['user', 'lesson', 'date_completed']
+        read_only_fields = ['user']
+
+# 8. Serializer de Tarea (Assignment)
+class AssignmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Assignment
+        fields = ['id', 'lesson', 'title', 'description']
+
+# 9. Serializer de Entrega (Submission)
+class SubmissionSerializer(serializers.ModelSerializer):
+    assignment_id = serializers.IntegerField(write_only=True)
+    # Anidar el usuario para ver quién lo entregó
+    user = UserSerializer(read_only=True) 
+
+    class Meta:
+        model = Submission
+        fields = [
+            'id', 'assignment', 'user', 'content', 
+            'status', 'submitted_at', 'assignment_id'
+        ]
+        read_only_fields = ['assignment', 'status', 'submitted_at']
+
+# 10. Serializer de Nota (Grade)
+class GradeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Grade
+        fields = ['id', 'submission', 'score', 'comments', 'graded_at']

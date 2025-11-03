@@ -13,19 +13,18 @@ import {
   Paper,
   Divider,
   Snackbar,
-  // --- NUEVAS IMPORTACIONES PARA EL CONTENIDO ---
   Accordion,
   AccordionSummary,
   AccordionDetails,
   List,
   ListItem,
+  ListItemButton, // <-- Asegúrate de importar ListItemButton
   ListItemIcon,
   ListItemText
 } from '@mui/material';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'; // Para el Accordion
-import OndemandVideoIcon from '@mui/icons-material/OndemandVideo'; // Icono para Lección de Video
-import ArticleIcon from '@mui/icons-material/Article'; // Icono para Lección de Texto
-// --- FIN NUEVAS IMPORTACIONES ---
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import OndemandVideoIcon from '@mui/icons-material/OndemandVideo';
+import ArticleIcon from '@mui/icons-material/Article';
 import SchoolIcon from '@mui/icons-material/School';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import AutoStoriesIcon from '@mui/icons-material/AutoStories';
@@ -43,14 +42,13 @@ function CourseDetailPage() {
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [snackbarSeverity, setSnackbarSeverity] = useState("success");
 
-  // --- useEffect para cargar datos (SIN CAMBIOS) ---
+  // --- useEffect (Corregido) ---
   useEffect(() => {
     const fetchCourseAndEnrollment = async () => {
       try {
         setLoading(true);
         setError(null);
         
-        // Carga detalle del curso (¡Ahora incluye módulos/lecciones!)
         const courseUrl = `/api/courses/${courseId}/`;
         const courseResponse = await axiosInstance.get(courseUrl);
         setCourse(courseResponse.data);
@@ -58,16 +56,18 @@ function CourseDetailPage() {
         // Verifica inscripción
         try {
             const enrollmentResponse = await axiosInstance.get(`/api/enrollments/my_enrollments/`);
-            const enrolled = enrollmentResponse.data.find(e => e.course === parseInt(courseId)); // Compara IDs
+            // Comparamos el ID del curso de la inscripción (e.course) con el ID de la URL
+            const enrolled = enrollmentResponse.data.find(e => e.course.id === parseInt(courseId));
+            
             if (enrolled) {
                 setIsEnrolled(true);
                 setEnrollmentId(enrolled.id);
             } else {
-                setIsEnrolled(false); // Asegúrate de resetear si no se encuentra
+                setIsEnrolled(false);
             }
         } catch (enrollmentErr) {
             console.warn("No se pudo verificar la inscripción.", enrollmentErr);
-            setIsEnrolled(false); // Asume no inscrito si hay error
+            setIsEnrolled(false);
         }
 
       } catch (err) {
@@ -87,7 +87,7 @@ function CourseDetailPage() {
   }, [courseId, navigate]);
 
 
-  // --- Función handleEnroll (SIN CAMBIOS) ---
+  // --- Función handleEnroll (Completa) ---
   const handleEnroll = async () => {
     try {
         const response = await axiosInstance.post('/api/enroll/', {
@@ -103,7 +103,7 @@ function CourseDetailPage() {
         let message = "Error desconocido al intentar inscribirse.";
         if (err.response && err.response.status === 409) {
              message = "Ya estás inscrito en este curso.";
-             setIsEnrolled(true); // Actualiza el estado si el backend dice que ya está inscrito
+             setIsEnrolled(true);
         } else if (err.response && err.response.data && err.response.data.detail) {
              message = err.response.data.detail;
         }
@@ -113,25 +113,61 @@ function CourseDetailPage() {
     }
   };
 
-  // --- Función handleSnackbarClose (SIN CAMBIOS) ---
+  // --- Función handleSnackbarClose (Completa) ---
   const handleSnackbarClose = (event, reason) => {
     if (reason === 'clickaway') return;
     setSnackbarOpen(false);
   };
   
-  // --- RENDERING DE ESTADOS (SIN CAMBIOS) ---
-  if (loading) { /* ... spinner ... */ }
-  if (error) { /* ... alerta de error ... */ }
+  // --- RENDERING DE ESTADOS (COMPLETO) ---
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+  if (error) {
+    return (
+      <Box sx={{ p: 4 }}>
+        <Alert severity="error">{error}</Alert>
+      </Box>
+    );
+  }
   if (!course) return null;
 
-  // --- FUNCIÓN PARA EL BOTÓN (SIN CAMBIOS) ---
-  const renderEnrollmentButton = () => { /* ... código del botón ... */ };
+  // --- FUNCIÓN PARA EL BOTÓN (COMPLETA) ---
+  const renderEnrollmentButton = () => {
+    if (isEnrolled) {
+      return (
+        <Button 
+            variant="contained" 
+            color="secondary" 
+            size="large" 
+            startIcon={<AutoStoriesIcon />}
+            sx={{ mt: 3 }}
+        >
+            Ver Contenido
+        </Button>
+      );
+    } else {
+      return (
+        <Button 
+            variant="contained" 
+            color="primary" 
+            size="large" 
+            startIcon={<SchoolIcon />}
+            sx={{ mt: 3 }}
+            onClick={handleEnroll}
+        >
+            Inscribirse Ahora
+        </Button>
+      );
+    }
+  };
 
-  // ==========================================================
-  // ¡NUEVO! FUNCIÓN PARA RENDERIZAR EL CONTENIDO DEL CURSO
-  // ==========================================================
+  // --- FUNCIÓN PARA EL CONTENIDO DEL CURSO (COMPLETA) ---
   const renderCourseContent = () => {
-    // Si no está inscrito, muestra el mensaje de advertencia
     if (!isEnrolled) {
       return (
         <Alert severity="warning" sx={{ mt: 2 }}>
@@ -139,8 +175,7 @@ function CourseDetailPage() {
         </Alert>
       );
     }
-
-    // Si está inscrito pero no hay módulos (o la API no los envió)
+    // ESTA ES LA LÓGICA QUE FALTABA
     if (!course.modules || course.modules.length === 0) {
       return (
         <Alert severity="info" sx={{ mt: 2 }}>
@@ -148,29 +183,12 @@ function CourseDetailPage() {
         </Alert>
       );
     }
-
-    // Si está inscrito y hay módulos, los mostramos con Accordion
+    // ESTA ES LA LÓGICA QUE FALTABA
     return (
       <Box sx={{ mt: 3 }}>
         {course.modules.map((module, index) => (
-          <Accordion 
-            key={module.id} 
-            // El primer módulo empieza expandido
-            defaultExpanded={index === 0} 
-            sx={{ 
-                // Estilo sutil para el Accordion en Dark Mode
-                backgroundColor: 'background.paper', 
-                border: '1px solid #333',
-                mb: 1, 
-                '&:before': { display: 'none' } // Quita la línea superior por defecto
-            }}
-          >
-            <AccordionSummary
-              expandIcon={<ExpandMoreIcon />}
-              aria-controls={`panel${module.id}-content`}
-              id={`panel${module.id}-header`}
-              sx={{ '&:hover': { backgroundColor: 'action.hover' } }}
-            >
+          <Accordion key={module.id} defaultExpanded={index === 0} sx={{ backgroundColor: 'background.paper', border: '1px solid #333', mb: 1, '&:before': { display: 'none' } }}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls={`panel${module.id}-content`} id={`panel${module.id}-header`} sx={{ '&:hover': { backgroundColor: 'action.hover' } }}>
               <Typography sx={{ fontWeight: 500 }}>
                 Módulo {module.order + 1}: {module.title}
               </Typography>
@@ -181,23 +199,15 @@ function CourseDetailPage() {
                       {module.description}
                   </Typography>
               )}
-              
-              {/* Lista de Lecciones dentro del Módulo */}
               <List dense>
                 {module.lessons && module.lessons.length > 0 ? (
                   module.lessons.map((lesson) => (
-                    <ListItem 
-                      key={lesson.id} 
-                      button // Haz que sea clickeable (navegaremos en el futuro)
-                      onClick={() => alert(`Navegar a Lección: ${lesson.title}`)} // <-- Placeholder
-                      sx={{ borderRadius: 1, '&:hover': { backgroundColor: 'action.hover' } }}
-                    >
+                    <ListItemButton key={lesson.id} onClick={() => navigate(`/courses/${courseId}/lessons/${lesson.id}`)} sx={{ borderRadius: 1, '&:hover': { backgroundColor: 'action.hover' } }}>
                       <ListItemIcon sx={{ minWidth: 32 }}>
-                        {/* Icono diferente si es video o texto */}
                         {lesson.video_url ? <OndemandVideoIcon fontSize="small" /> : <ArticleIcon fontSize="small" />}
                       </ListItemIcon>
                       <ListItemText primary={`Lección ${lesson.order + 1}: ${lesson.title}`} />
-                    </ListItem>
+                    </ListItemButton>
                   ))
                 ) : (
                   <ListItem>
@@ -212,18 +222,16 @@ function CourseDetailPage() {
     );
   };
 
-  // --- RENDERIZADO PRINCIPAL DEL COMPONENTE ---
+  // --- RENDERIZADO PRINCIPAL (COMPLETO) ---
   return (
     <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, maxWidth: 900, mx: 'auto' }}>
         <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
-            {/* Mensaje de Inscripción (si aplica) */}
             {isEnrolled && (
                 <Alert icon={<CheckCircleIcon fontSize="inherit" />} severity="success" sx={{ mb: 2 }}>
                     ¡Estás inscrito en este curso!
                 </Alert>
             )}
 
-            {/* Título y Descripción del Curso */}
             <Typography variant="h3" component="h1" gutterBottom sx={{ fontWeight: 600 }}>
                 {course.title}
             </Typography>
@@ -232,19 +240,16 @@ function CourseDetailPage() {
                 {course.description}
             </Typography>
 
-            {/* Botón de Inscripción / Ver Contenido */}
             {renderEnrollmentButton()}
             
-            {/* Sección de Contenido (Módulos y Lecciones) */}
             <Box sx={{ mt: 5 }}>
                 <Typography variant="h5" sx={{ mb: 2, fontWeight: 500 }}>
                     Contenido del Curso
                 </Typography>
-                {renderCourseContent()} {/* <-- LLAMAMOS A LA NUEVA FUNCIÓN */}
+                {renderCourseContent()}
             </Box>
         </Paper>
         
-        {/* Notificación Snackbar */}
         <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleSnackbarClose}>
             <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
                 {snackbarMessage}

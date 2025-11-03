@@ -25,7 +25,8 @@ SECRET_KEY = 'django-insecure-#!a#0sh%yhup$dr*2t2n%zpo-w9v!v@v962wv_65&%c$qja$-e
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+# Añadimos localhost para desarrollo
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 
 
 # Application definition
@@ -120,7 +121,7 @@ LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'UTC'
 
-USE_I18N = True
+USE_I1N = True
 
 USE_TZ = True
 
@@ -134,13 +135,33 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Apunta a tu modelo de usuario personalizado
 AUTH_USER_MODEL = 'api.User'
 
+# --- Configuración de CORS ---
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
+CORS_ALLOW_METHODS = [
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
+]
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "authorization",
+    "content-type",
+    "origin",
+    "x-csrftoken",
+    "x-requested-with",
+]
 
+# --- Configuración de REST Framework y JWT ---
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -153,61 +174,39 @@ REST_FRAMEWORK = {
 
 REST_AUTH = {
     'USE_JWT': True,
-    'JWT_AUTH_HTTPONLY': False, # Permite que el frontend lea el token
+    'JWT_AUTH_HTTPONLY': False,
     'TOKEN_MODEL' : None
 }
 
 SIMPLE_JWT = {
-    'AUTH_USER_MODEL': 'api.User', # Le apunta a tu modelo personalizado
+    'AUTH_USER_MODEL': 'api.User', 
 }
-CORS_ALLOW_METHODS = [
-    "DELETE",
-    "GET",
-    "OPTIONS",
-    "PATCH",
-    "POST",
-    "PUT",
-]
 
-# ¡ASEGÚRATE DE QUE ESTO ESTÉ CONFIGURADO!
-# Permite las cabeceras que enviamos (Authorization y Content-Type)
-CORS_ALLOW_HEADERS = [
-    "accept",
-    "authorization", # <-- MUY IMPORTANTE
-    "content-type",  # <-- MUY IMPORTANTE
-    "origin",
-    "x-csrftoken",
-    "x-requested-with",
-]
-# backend/core/settings.py
+# --- Configuración de Allauth (¡AQUÍ ESTÁ EL ARREGLO!) ---
 
 AUTHENTICATION_BACKENDS = [
-    # Needed to login by username in Django admin, regardless of `allauth`
     'django.contrib.auth.backends.ModelBackend',
-
-    # `allauth` specific authentication methods, such as login by email
     'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
-# backend/core/settings.py
-
 SITE_ID = 1
 
-# Define cómo inician sesión (con 'username' O 'email')
+# 1. REEMPLAZO DE 'ACCOUNT_AUTHENTICATION_METHOD'
 ACCOUNT_LOGIN_METHODS = {'username', 'email'}
 
-# Define qué campos se piden en el registro
-ACCOUNT_SIGNUP_FIELDS = ['username', 'email*']
+# 2. CAMPOS DE REGISTRO
+ACCOUNT_SIGNUP_FIELDS = ['username', 'email*', 'password1']
 
-# Verificación de Email
-ACCOUNT_EMAIL_VERIFICATION = 'mandatory'       # Asegura que el email se verifique
-ACCOUNT_UNIQUE_EMAIL = True                     # Asegura que los emails no se repitan
+# 4. Verificación de email
+ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
+ACCOUNT_UNIQUE_EMAIL = True
 
-# Otras configuraciones
+# 5. Le decimos a allauth que el campo 'username' SÍ existe
+ACCOUNT_USER_MODEL_USERNAME_FIELD = 'username'
+
+# 6. Redirecciones (sin cambios)
 LOGIN_REDIRECT_URL = '/'
 ACCOUNT_LOGOUT_ON_GET = True
-ACCOUNT_ADAPTER = 'allauth.account.adapter.DefaultAccountAdapter'
-SOCIALACCOUNT_ADAPTER = 'allauth.socialaccount.adapter.DefaultSocialAccountAdapter'
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL = 'http://localhost:5173/login?verified=true'
 ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = 'http://localhost:5173/dashboard?verified=true'

@@ -87,7 +87,7 @@ function HomePage() {
         </Typography>
         <Grid container spacing={4}>
           {[...Array(6)].map((_, index) => ( // Renderiza 6 esqueletos
-            <Grid key={index} item xs={12} sm={6} md={4}>
+            <Grid key={index} grid={{ xs: 12, sm: 6, md: 4 }}>
               <Skeleton variant="rectangular" height={200} sx={{ borderRadius: 2 }} />
             </Grid>
           ))}
@@ -142,8 +142,7 @@ function HomePage() {
           
           <Grid 
             key={course.id} 
-            item 
-            xs={12} sm={6} md={4} // Usamos 'item' y las props de breakpoints
+            grid={{ xs: 12, sm: 6, md: 4 }}// Usamos 'item' y las props de breakpoints
             // Aplica la animación individual a cada tarjeta
             component={motion.div} 
             variants={itemVariants} 

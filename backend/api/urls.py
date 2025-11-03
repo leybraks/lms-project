@@ -10,6 +10,8 @@ from .views import (
     MyEnrollmentListView,
     LessonCompleteView,
     MyLessonCompletionsListView,
+    AssignmentDetailView,    # <-- ¡Importa esta!
+    SubmissionCreateUpdateView,
     get_me_view # Importamos esta también, ya que existe en views.py
 ) 
 
@@ -26,4 +28,7 @@ urlpatterns = [
     path('users/me/', get_me_view, name='get-me'),
     path('lessons/complete/', LessonCompleteView.as_view(), name='lesson-complete'),
     path('completions/my_completions/', MyLessonCompletionsListView.as_view(), name='my-lesson-completions'),
+    path('assignments/lesson/<int:lesson_id>/', AssignmentDetailView.as_view(), name='assignment-detail-by-lesson'),
+    # Enviar una entrega
+    path('submissions/', SubmissionCreateUpdateView.as_view(), name='submission-create'),
 ]

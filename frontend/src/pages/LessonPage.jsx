@@ -12,11 +12,14 @@ import {
   Breadcrumbs, 
   Link, 
   Button,
-  Divider, // <-- Asegúrate de que Divider esté importado
-  Snackbar // <-- Y Snackbar
+  Divider,
+  Snackbar,
+  TextField,
+  Icon 
 } from '@mui/material';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle'; // <-- Icono de completado
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import AssignmentIcon from '@mui/icons-material/Assignment';
 
 function LessonPage() {
   const { courseId, lessonId } = useParams(); 
@@ -26,53 +29,55 @@ function LessonPage() {
   const [courseTitle, setCourseTitle] = useState(''); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  // --- NUEVOS ESTADOS PARA PROGRESO ---
   const [isCompleted, setIsCompleted] = useState(false);
-  const [isCompleting, setIsCompleting] = useState(false); // Para deshabilitar el botón
-
-  // Estados para la notificación
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [assignment, setAssignment] = useState(null); 
+  const [submissionContent, setSubmissionContent] = useState(""); 
+  const [submissionStatus, setSubmissionStatus] = useState(null); 
+  const [isSubmitting, setIsSubmitting] = useState(false); 
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
+  const [snackbarSeverity, setSnackbarSeverity] = useState("success");
 
   useEffect(() => {
     const fetchLessonData = async () => {
       try {
         setLoading(true);
         setError(null);
-        setIsCompleted(false); // Resetea el estado al cargar
+        setIsCompleted(false);
+        setAssignment(null); 
 
         // 1. Obtener el detalle de la lección
         const lessonUrl = `/api/lessons/${lessonId}/`;
         const lessonResponse = await axiosInstance.get(lessonUrl);
         setLesson(lessonResponse.data);
         
-        // (Opcional) Obtener título del curso para Breadcrumbs
-        // Esto asume que tu LessonSerializer anida la info
-        if (lessonResponse.data.module && lessonResponse.data.module.course) {
-             setCourseTitle(lessonResponse.data.module.course.title);
-        } else {
-             // Fallback si no está anidado
-             // const courseResponse = await axiosInstance.get(`/api/courses/${courseId}/`);
-             // setCourseTitle(courseResponse.data.title);
-        }
-
         // 2. Verificar si esta lección ya está completada
         const completionsResponse = await axiosInstance.get('/api/completions/my_completions/');
-        // lessonId es un string de la URL, lesson.id es un número
-        const completed = completionsResponse.data.some(comp => comp.lesson === parseInt(lessonId));
-        
+        // Comparamos el ID de la lección en la respuesta con el ID de la URL
+        const completed = completionsResponse.data.some(comp => comp.lesson.id === parseInt(lessonId));
         if (completed) {
           setIsCompleted(true);
         }
 
+        // 3. Verificar si esta lección tiene una tarea
+        try {
+          const assignmentUrl = `/api/assignments/lesson/${lessonId}/`;
+          const assignmentResponse = await axiosInstance.get(assignmentUrl);
+          setAssignment(assignmentResponse.data);
+          
+        } catch (assignmentErr) {
+          if (assignmentErr.response && assignmentErr.response.status === 404) {
+             console.log("Esta lección no tiene tarea.");
+             setAssignment(null);
+          } else {
+             throw assignmentErr; 
+          }
+        }
+
       } catch (err) {
         console.error("Error al cargar la lección:", err);
-        if (err.response && err.response.status === 404) {
-          setError("Lección o datos de completado no encontrados.");
-        } else if (err.response && (err.response.status === 401 || err.response.status === 403)) {
-          // Si el usuario no está inscrito, el permiso 'IsEnrolledPermission' de Django (que añadimos)
-          // devolverá 403 Forbidden.
+        if (err.response && (err.response.status === 401 || err.response.status === 403)) {
           setError("No tienes permiso para ver esta lección. Asegúrate de estar inscrito.");
         } else {
           setError("Error al cargar el contenido de la lección.");
@@ -86,45 +91,138 @@ function LessonPage() {
   }, [lessonId, courseId, navigate]);
 
 
-  // --- NUEVA FUNCIÓN: Marcar como Completada ---
+  // --- FUNCIÓN: Marcar como Completada ---
   const handleMarkAsComplete = async () => {
-    setIsCompleting(true); // Bloquea el botón
+    setIsCompleting(true); 
     try {
       await axiosInstance.post('/api/lessons/complete/', {
         lesson_id: lessonId
       });
       
-      setIsCompleted(true); // Actualiza la UI
+      setIsCompleted(true); 
       setSnackbarMessage("¡Lección completada!");
+      setSnackbarSeverity("success");
       setSnackbarOpen(true);
 
     } catch (err) {
       console.error("Error al marcar como completada:", err);
       if (err.response && err.response.status === 409) {
-         // Si ya estaba completada (conflicto)
          setIsCompleted(true); 
       } else {
-         alert("Error al guardar tu progreso.");
+         setSnackbarMessage("Error al guardar tu progreso.");
+         setSnackbarSeverity("error");
+         setSnackbarOpen(true);
       }
     } finally {
-      setIsCompleting(false); // Desbloquea el botón
+      setIsCompleting(false); 
     }
   };
 
+  // --- FUNCIÓN: Enviar Tarea ---
+  const handleSubmissionSubmit = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    
+    try {
+      const response = await axiosInstance.post('/api/submissions/', {
+        assignment_id: assignment.id,
+        content: submissionContent
+      });
+
+      setSubmissionStatus(response.data.status); 
+      setSnackbarMessage("¡Tarea entregada con éxito!");
+      setSnackbarSeverity("success");
+      setSnackbarOpen(true);
+
+    } catch (err) {
+      console.error("Error al enviar la tarea:", err);
+      setSnackbarMessage("Error al enviar la tarea.");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // --- FUNCIÓN: Cerrar Snackbar ---
   const handleSnackbarClose = (event, reason) => {
     if (reason === 'clickaway') return;
     setSnackbarOpen(false);
   };
 
-  // --- RENDERIZADO DE ESTADOS ---
-
-  if (loading) { /* ... spinner ... */ }
-  if (error) { /* ... alerta de error ... */ }
+  // --- RENDERING DE ESTADOS (¡COMPLETO!) ---
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+  if (error) {
+    return (
+      <Box sx={{ p: 4 }}>
+        <Alert severity="error">{error}</Alert>
+         <Button component={RouterLink} to={`/courses/${courseId}`} sx={{ mt: 2 }}>
+            Volver al curso
+        </Button>
+      </Box>
+    );
+  }
   if (!lesson) return null;
 
+  // --- FUNCIÓN: Renderizar Tarea (¡COMPLETA!) ---
+  const renderAssignmentSection = () => {
+    if (!assignment) {
+      return null; 
+    }
+    if (submissionStatus === 'SUBMITTED' || submissionStatus === 'GRADED') {
+        return (
+            <Alert severity="success" icon={<CheckCircleIcon fontSize="inherit" />}>
+                Ya has entregado esta tarea.
+            </Alert>
+        );
+    }
+    return (
+      <Box 
+        component="form" 
+        onSubmit={handleSubmissionSubmit} 
+        sx={{ mt: 4, p: 3, border: '1px solid #444', borderRadius: 2, backgroundColor: 'background.default' }}
+      >
+        <Typography variant="h5" component="h3" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+          <AssignmentIcon sx={{ mr: 1, color: 'primary.main' }} />
+          Tarea: {assignment.title}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" paragraph>
+          {assignment.description}
+        </Typography>
+        <TextField
+          label="Tu Respuesta"
+          multiline
+          rows={6}
+          fullWidth
+          variant="outlined"
+          value={submissionContent}
+          onChange={(e) => setSubmissionContent(e.target.value)}
+          required
+          sx={{ mt: 2 }}
+        />
+        <Button
+          type="submit"
+          variant="contained"
+          color="primary"
+          size="large"
+          disabled={isSubmitting || submissionContent.trim() === ""}
+          sx={{ mt: 2 }}
+        >
+          {isSubmitting ? "Enviando..." : "Enviar Tarea"}
+        </Button>
+      </Box>
+    );
+  };
+
+  // --- RENDERIZADO PRINCIPAL (¡COMPLETO!) ---
   return (
     <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
-      {/* Migas de Pan (Breadcrumbs) */}
       <Breadcrumbs separator={<NavigateNextIcon fontSize="small" />} sx={{ mb: 3 }}>
         <Link component={RouterLink} underline="hover" color="inherit" to="/">
           Inicio
@@ -146,12 +244,23 @@ function LessonPage() {
             {lesson.content}
           </Typography>
         )}
+        {lesson.video_url && (
+          <Box sx={{ mt: 3, position: 'relative', paddingBottom: '56.25%', height: 0, overflow: 'hidden' }}>
+            <iframe
+              src={lesson.video_url}
+              title={lesson.title}
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+            />
+          </Box>
+        )}
 
-        
+        {renderAssignmentSection()}
         
         <Divider sx={{ my: 3 }} />
 
-        {/* --- NUEVO BOTÓN CONDICIONAL DE PROGRESO --- */}
         {isCompleted ? (
           <Alert severity="success" icon={<CheckCircleIcon fontSize="inherit" />}>
             ¡Lección Completada!
@@ -163,7 +272,7 @@ function LessonPage() {
             size="large"
             startIcon={<CheckCircleIcon />}
             onClick={handleMarkAsComplete}
-            disabled={isCompleting} // Deshabilita mientras guarda
+            disabled={isCompleting}
           >
             {isCompleting ? "Guardando..." : "Marcar como Completada"}
           </Button>
@@ -174,9 +283,8 @@ function LessonPage() {
         </Button>
       </Paper>
       
-      {/* Notificación de Éxito */}
-      <Snackbar open={snackbarOpen} autoHideDuration={4000} onClose={handleSnackbarClose}>
-          <Alert onClose={handleSnackbarClose} severity="success" sx={{ width: '100%' }}>
+      <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleSnackbarClose}>
+          <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
               {snackbarMessage}
           </Alert>
       </Snackbar>
