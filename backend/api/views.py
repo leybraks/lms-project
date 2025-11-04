@@ -9,8 +9,8 @@ from .permissions import IsEnrolledPermission
 from django.shortcuts import get_object_or_404
 
 # Imports de Modelos y Serializers de tu app
-from .models import Course, Enrollment, Lesson, LessonCompletion, Assignment, Submission
-from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer, AssignmentSerializer, SubmissionSerializer
+from .models import Course, Enrollment, Lesson, LessonCompletion, Assignment, Submission, Quiz
+from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer, AssignmentSerializer, SubmissionSerializer, QuizSerializer
 
 # ====================================================================
 # 1. Vistas de Cursos
@@ -130,7 +130,7 @@ class LessonDetailView(generics.RetrieveAPIView):
     serializer_class = LessonSerializer
     # ¡APLICAMOS EL NUEVO PERMISO!
     # El usuario debe estar autenticado Y TAMBIÉN inscrito
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEnrolledPermission]
 
 
     # ====================================================================
@@ -241,3 +241,64 @@ class SubmissionCreateUpdateView(generics.CreateAPIView):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         else:
             return Response(serializer.data, status=status.HTTP_200_OK)
+        
+class MySubmissionsListView(generics.ListAPIView):
+    """
+    Muestra todas las entregas (submissions) del usuario logueado.
+    """
+    serializer_class = SubmissionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Filtra las entregas por el usuario que realiza la solicitud
+        return Submission.objects.filter(user=self.request.user)
+
+# ====================================================================
+# NUEVA VISTA: Detalle de Examen (por Módulo)
+# ====================================================================
+class QuizDetailView(generics.RetrieveAPIView):
+    """
+    Devuelve el Examen asociado a un ID de Módulo.
+    """
+    queryset = Quiz.objects.all()
+    serializer_class = QuizSerializer
+    permission_classes = [IsAuthenticated, IsEnrolledPermission] # Protegido
+    
+    # Buscamos el examen usando el ID del módulo (OneToOneField)
+    lookup_field = 'module_id' 
+    lookup_url_kwarg = 'module_id' # El nombre del parámetro en la URL
+# ====================================================================
+# NUEVA VISTA: Estadísticas del Dashboard
+# ====================================================================
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_dashboard_stats(request):
+    """
+    Devuelve un resumen de las estadísticas del usuario logueado
+    para el Dashboard del Frontend.
+    """
+    user = request.user
+    
+    # 1. Contar Cursos Inscritos
+    enrolled_courses_count = Enrollment.objects.filter(user=user).count()
+    
+    # 2. Contar Lecciones Completadas
+    lessons_completed_count = LessonCompletion.objects.filter(user=user).count()
+    
+    # 3. Contar Tareas Entregadas (Status SUBMITTED o GRADED)
+    submissions_count = Submission.objects.filter(
+        user=user, 
+        status__in=['SUBMITTED', 'GRADED']
+    ).count()
+
+    # (En el futuro, aquí podríamos añadir las insignias)
+    
+    # Prepara la respuesta JSON
+    data = {
+        'enrolled_courses': enrolled_courses_count,
+        'lessons_completed': lessons_completed_count,
+        'assignments_submitted': submissions_count,
+        # 'badges_unlocked': 0 # (Para el futuro)
+    }
+    
+    return Response(data, status=status.HTTP_200_OK)

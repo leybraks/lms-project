@@ -137,7 +137,18 @@ class Assignment(models.Model):
     description = models.TextField(
         help_text="Las instrucciones para la tarea."
     )
-
+    # Feature 3: Límite de tiempo
+    due_date = models.DateTimeField(
+        null=True, 
+        blank=True,
+        help_text="Fecha y hora límite de entrega."
+    )
+    
+    # Feature 4: Permitir edición
+    allow_edits = models.BooleanField(
+        default=True,
+        help_text="Permitir al alumno editar la entrega después de enviarla."
+    )
     def __str__(self):
         return f'Tarea para la lección: {self.lesson.title}'
 
@@ -197,3 +208,101 @@ class Grade(models.Model):
 
     def __str__(self):
         return f'Nota: {self.score} para {self.submission}'
+    
+# ====================================================================
+# 10. NUEVO MODELO: Examen (Quiz)
+# ====================================================================
+class Quiz(models.Model):
+    """
+    Un examen o "Quiz" asociado a un Módulo.
+    """
+    module = models.OneToOneField(
+        Module,
+        on_delete=models.CASCADE,
+        related_name='quiz' # Permite a Module encontrar su Examen
+    )
+    title = models.CharField(max_length=200)
+    due_date = models.DateTimeField(
+        null=True, 
+        blank=True,
+        help_text="Fecha y hora límite de entrega."
+    )
+    # Feature 7: Límite de intentos (configurable por el profesor)
+    max_attempts = models.PositiveIntegerField(
+        default=3,
+        help_text="Máximo de intentos permitidos (3 por defecto)."
+    )
+
+    def __str__(self):
+        return f'Examen del {self.module.title}'
+
+# ====================================================================
+# 11. NUEVO MODELO: Pregunta (Question)
+# ====================================================================
+class Question(models.Model):
+    """
+    Una pregunta individual dentro de un Quiz.
+    """
+    quiz = models.ForeignKey(
+        Quiz,
+        on_delete=models.CASCADE,
+        related_name='questions' # Permite a Quiz encontrar sus Preguntas
+    )
+    text = models.TextField(help_text="El enunciado de la pregunta")
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f'Pregunta {self.order}: {self.text[:50]}...'
+
+# ====================================================================
+# 12. NUEVO MODELO: Opción (Choice)
+# ====================================================================
+class Choice(models.Model):
+    """
+    Una opción de respuesta para una Pregunta (si es de opción múltiple).
+    """
+    question = models.ForeignKey(
+        Question,
+        on_delete=models.CASCADE,
+        related_name='choices' # Permite a Question encontrar sus Opciones
+    )
+    text = models.CharField(max_length=500)
+    is_correct = models.BooleanField(
+        default=False,
+        help_text="Marcar si esta es la respuesta correcta."
+    )
+
+    def __str__(self):
+        return f'Opción para Pregunta {self.question.id}: {self.text}'
+
+# ====================================================================
+# 13. NUEVO MODELO: Intento de Examen (QuizAttempt)
+# ====================================================================
+class QuizAttempt(models.Model):
+    """
+    Un registro del intento de un usuario en un examen.
+    """
+    quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE, related_name='attempts')
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='quiz_attempts'
+    )
+    score = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2,
+        help_text="Puntaje obtenido (ej: 85.50)"
+    )
+    attempt_number = models.PositiveIntegerField()
+    date_taken = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Un usuario tiene un número de intento único por examen
+        unique_together = ('quiz', 'user', 'attempt_number')
+        ordering = ['-date_taken'] # El más reciente primero
+
+    def __str__(self):
+        return f'Intento {self.attempt_number} de {self.user.username} en {self.quiz.title}'

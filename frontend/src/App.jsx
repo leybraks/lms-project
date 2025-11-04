@@ -4,7 +4,8 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
 import CourseDetailPage from './pages/CourseDetailPage';
-import LessonPage from './pages/LessonPage'; // <-- 1. ASEGÚRATE DE IMPORTAR LA PÁGINA
+import LessonPage from './pages/LessonPage';
+import QuizPage from './pages/QuizPage'; // <-- 1. ¡IMPORTA LA NUEVA PÁGINA!
 import PrivateRoute from './components/PrivateRoute'; 
 import MainLayout from './components/MainLayout'; 
 
@@ -19,17 +20,17 @@ function App() {
           <Route element={<MainLayout />}> 
               <Route path="/" element={<HomePage />} />
               <Route path="/courses/:courseId" element={<CourseDetailPage />} />
+              <Route path="/courses/:courseId/lessons/:lessonId" element={<LessonPage />} /> 
               
-              {/* 2. ASEGÚRATE DE QUE ESTA RUTA EXISTA */}
+              {/* 2. ¡AÑADE LA NUEVA RUTA DEL EXAMEN! */}
               <Route 
-                path="/courses/:courseId/lessons/:lessonId" 
-                element={<LessonPage />} 
+                path="/courses/:courseId/modules/:moduleId/quiz" 
+                element={<QuizPage />} 
               />
               
           </Route>
       </Route>
       
-      {/* 3. La ruta "Catch-all" que te redirige */}
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );
