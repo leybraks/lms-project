@@ -24,10 +24,14 @@ class UserSerializer(serializers.ModelSerializer):
 
 # 2. Serializer de Lección (El más interno)
 class LessonSerializer(serializers.ModelSerializer):
+    module_id = serializers.ReadOnlyField(source='module.id')
+    course_id = serializers.ReadOnlyField(source='module.course.id')
     class Meta:
         model = Lesson
-        fields = ['id', 'title', 'order', 'content', 'video_url']
-
+        fields = [
+            'id', 'title', 'order', 'content', 'video_url', 
+            'module_id', 'course_id'
+        ]
 # 3. Serializer de Módulo (Anida Lecciones)
 class ModuleSerializer(serializers.ModelSerializer):
     lessons = LessonSerializer(many=True, read_only=True)
@@ -54,11 +58,41 @@ class CourseDetailSerializer(serializers.ModelSerializer):
 class EnrollmentSerializer(serializers.ModelSerializer):
     course_id = serializers.IntegerField(write_only=True)
     course = CourseSerializer(read_only=True) 
+    
+    # --- ¡NUEVOS CAMPOS PARA EL PROGRESO! ---
+    lessons_completed_count = serializers.SerializerMethodField()
+    total_lessons_count = serializers.SerializerMethodField()
+    # ----------------------------------------
 
     class Meta:
         model = Enrollment
-        fields = ['id', 'user', 'course', 'date_enrolled', 'completed', 'course_id']
+        # ¡Añade los nuevos campos a la lista 'fields'!
+        fields = [
+            'id', 'user', 'course', 'date_enrolled', 'completed', 'course_id', 
+            'lessons_completed_count', 'total_lessons_count' 
+        ]
         read_only_fields = ['user']
+
+    def get_total_lessons_count(self, obj):
+        """
+        Devuelve el número total de lecciones en el curso de esta inscripción.
+        (obj es la instancia de Enrollment)
+        """
+        # obj.course es el curso asociado a esta inscripción
+        # Buscamos lecciones cuyo módulo pertenezca a este curso
+        return Lesson.objects.filter(module__course=obj.course).count()
+
+    def get_lessons_completed_count(self, obj):
+        """
+        Devuelve cuántas lecciones de ese curso ha completado el usuario.
+        (obj es la instancia de Enrollment)
+        """
+        # obj.user es el usuario de esta inscripción
+        # obj.course es el curso
+        return LessonCompletion.objects.filter(
+            user=obj.user,
+            lesson__module__course=obj.course
+        ).count()
 
 # 7. Serializer de Completar Lección
 class LessonCompletionSerializer(serializers.ModelSerializer):

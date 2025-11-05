@@ -15,6 +15,8 @@ from .views import (
     SubmissionCreateUpdateView,
     MySubmissionsListView,
     QuizDetailView,
+    UpcomingLessonsView,
+    MyMentorsView,
     get_dashboard_stats,
     get_me_view # Importamos esta también, ya que existe en views.py
 ) 
@@ -39,5 +41,7 @@ urlpatterns = [
     path('submissions/my_submissions/', MySubmissionsListView.as_view(), name='my-submissions'),
     path('quizzes/module/<int:module_id>/', QuizDetailView.as_view(), name='quiz-detail-by-module'),
     path('dashboard/stats/', get_dashboard_stats, name='dashboard-stats'),
+    path('dashboard/upcoming_lessons/', UpcomingLessonsView.as_view(), name='dashboard-upcoming'),
+    path('dashboard/my_mentors/', MyMentorsView.as_view(), name='dashboard-my-mentors'),
 ]
 

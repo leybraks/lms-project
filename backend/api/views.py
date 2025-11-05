@@ -9,7 +9,7 @@ from .permissions import IsEnrolledPermission
 from django.shortcuts import get_object_or_404
 
 # Imports de Modelos y Serializers de tu app
-from .models import Course, Enrollment, Lesson, LessonCompletion, Assignment, Submission, Quiz
+from .models import Course, Enrollment, Lesson, LessonCompletion, Assignment, Submission, Quiz, User
 from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer, AssignmentSerializer, SubmissionSerializer, QuizSerializer
 
 # ====================================================================
@@ -302,3 +302,59 @@ def get_dashboard_stats(request):
     }
     
     return Response(data, status=status.HTTP_200_OK)
+# ====================================================================
+# NUEVA VISTA: Lecciones Próximas para el Dashboard
+# ====================================================================
+class UpcomingLessonsView(generics.ListAPIView):
+    """
+    Devuelve las próximas 5 lecciones pendientes del usuario logueado.
+    """
+    serializer_class = LessonSerializer # Reutilizamos el LessonSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        
+        # 1. Obtener los IDs de los cursos en los que el usuario está inscrito
+        enrolled_courses_ids = Enrollment.objects.filter(user=user).values_list('course_id', flat=True)
+        
+        # 2. Obtener los IDs de las lecciones que el usuario YA completó
+        completed_lessons_ids = LessonCompletion.objects.filter(user=user).values_list('lesson_id', flat=True)
+        
+        # 3. Buscar lecciones que pertenezcan a los cursos inscritos
+        #    Y que NO estén en la lista de completadas.
+        queryset = Lesson.objects.filter(
+            module__course_id__in=enrolled_courses_ids
+        ).exclude(
+            id__in=completed_lessons_ids
+        ).order_by('module__order', 'order') # Ordena por módulo y luego lección
+        
+        # Devuelve solo las primeras 5
+        return queryset[:5]
+    
+# ====================================================================
+# NUEVA VISTA: Mentores del Dashboard
+# ====================================================================
+class MyMentorsView(generics.ListAPIView):
+    """
+    Devuelve la lista de Profesores (Mentores) de los cursos
+    en los que el usuario logueado está inscrito.
+    """
+    serializer_class = UserSerializer # Reutilizamos tu UserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        
+        # Esta consulta busca:
+        # 1. Usuarios (User)
+        # 2. Cuyo rol sea 'PROFESSOR'
+        # 3. Que enseñen cursos (courses_taught)
+        # 4. Donde esos cursos tengan inscripciones (enrollments)
+        # 5. Cuyo usuario (user) sea el que hace la solicitud (el alumno).
+        # .distinct() asegura que no tengamos duplicados si el alumno
+        # está en 2 cursos con el mismo profesor.
+        return User.objects.filter(
+            role='PROFESSOR',
+            courses_taught__enrollments__user=user
+        ).distinct()

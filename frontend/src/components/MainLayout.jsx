@@ -5,6 +5,8 @@ import { Outlet, Link as RouterLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useColorMode } from '../context/ThemeContext'; 
 import { useTheme } from '@mui/material/styles'; 
+import { AnimatePresence, motion } from "framer-motion"; // <-- ¡Importante!
+
 
 import { 
   AppBar, 
@@ -128,6 +130,7 @@ function MainLayout() {
         variant="permanent"
         anchor="left"
       >
+        {/* ... (Todo el contenido de tu Drawer sigue igual aquí) ... */}
         <Toolbar sx={{ justifyContent: 'flex-start', alignItems: 'center', py: 2, pl: 3, height: 80 }}>
             <Typography variant="h5" color="primary.main" sx={{ fontWeight: 700 }}>
                 Coursue
@@ -195,26 +198,37 @@ function MainLayout() {
         </Box>
       </Drawer>
       
-      {/* 3. CONTENIDO PRINCIPAL (Outlet) - ¡ARREGLADO! */}
+      {/* 3. CONTENIDO PRINCIPAL (Outlet) - ¡AQUÍ ESTÁN LOS CAMBIOS! */}
       <Box
         component="main"
-        sx={{ 
-            flexGrow: 1, 
-            p: 3, 
-            width: `calc(100% - ${drawerWidth}px)`, 
-            mt: '80px', // Altura del AppBar
-            borderRadius: '20px 0 0 0',
-            
-            // --- ¡CAMBIOS CLAVE! ---
-            // 1. Le damos una altura EXACTA que descuenta el AppBar
-            height: 'calc(100vh - 80px)', 
-            
-            // 2. Le PROHIBIMOS tener su propio scroll
-            overflow: 'hidden', 
-        }} 
+        sx={{
+          flexGrow: 1,
+          p: 3,
+          width: `calc(100% - ${drawerWidth}px)`,
+          mt: '80px',
+          height: 'calc(100vh - 80px)', // <-- Altura correcta
+          position: "relative"
+          // <-- ¡ELIMINAMOS 'overflow: hidden'!
+        }}
       >
-        <Outlet /> 
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={location.pathname}
+            
+            // --- Animación de deslizamiento lateral ---
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+            
+            // <-- ¡ELIMINAMOS EL 'style' con 'overflow: hidden'!
+            // 'HomePage' ahora controlará su propio scroll
+          >
+            <Outlet />
+          </motion.div>
+        </AnimatePresence>
       </Box>
+
     </Box>
   );
 }
