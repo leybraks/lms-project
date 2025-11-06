@@ -11,6 +11,13 @@ class User(AbstractUser):
         ('PROFESSOR', 'Profesor'),
     )
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='STUDENT')
+    title = models.CharField(
+        max_length=100, 
+        blank=True, 
+        null=True, 
+        help_text="Ej: Desarrollador Full-Stack & Experto en IA"
+    )
+    bio = models.TextField(blank=True, null=True, help_text="Biografía del instructor")
     # Nota: Asegúrate de tener 'api.User' en tu settings.AUTH_USER_MODEL
 
 # ====================================================================
@@ -27,9 +34,21 @@ class Course(models.Model):
     aforo_max = models.PositiveIntegerField(default=50) # (Lo mantuve de tu modelo original)
     created_at = models.DateTimeField(auto_now_add=True)
     is_published = models.BooleanField(default=False)
+    main_image_url = models.URLField(
+        blank=True, 
+        null=True, 
+        help_text="URL de la imagen de portada (ej: Unsplash)"
+    )
+    estimated_duration = models.CharField(
+        max_length=50, 
+        blank=True, 
+        null=True, 
+        help_text="Ej: Aprox. 3h 30m"
+    )
 
     def __str__(self):
         return self.title
+    
 
 # ====================================================================
 # 3. Modelo de Inscripción (Enrollment) - (Versión Limpia)
@@ -306,3 +325,166 @@ class QuizAttempt(models.Model):
 
     def __str__(self):
         return f'Intento {self.attempt_number} de {self.user.username} en {self.quiz.title}'
+    
+# ====================================================================
+# 14. NUEVO MODELO: Recurso (Resource)
+# ====================================================================
+class Resource(models.Model):
+    """
+    Un archivo descargable para una lección (PDF, ZIP, etc.).
+    """
+    lesson = models.ForeignKey(
+        Lesson,
+        on_delete=models.CASCADE,
+        related_name='resources' # Permite a Lesson encontrar sus Recursos
+    )
+    title = models.CharField(max_length=200)
+    file = models.FileField(upload_to='lesson_resources/')
+
+    def __str__(self):
+        return f'Recurso "{self.title}" para {self.lesson.title}'
+    
+
+# ====================================================================
+# 14. NUEVO: Objetivos de Aprendizaje ("Qué aprenderás")
+# ====================================================================
+class LearningObjective(models.Model):
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='learning_objectives')
+    description = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.description
+
+# ====================================================================
+# 15. NUEVO: Requisitos del Curso
+# ====================================================================
+class Requirement(models.Model):
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='requirements')
+    description = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.description
+
+# ====================================================================
+# 16. NUEVO: Beneficios del Curso ("Este curso incluye")
+# ====================================================================
+class CourseBenefit(models.Model):
+    ICON_CHOICES = (
+        ('video', 'Video'),
+        ('article', 'Artículo'),
+        ('access', 'Acceso'),
+        ('task', 'Tarea'),
+        ('certificate', 'Certificado'),
+    )
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='benefits')
+    description = models.CharField(max_length=255)
+    # (Opcional, pero genial para el diseño)
+    icon = models.CharField(max_length=20, choices=ICON_CHOICES, default='article') 
+
+    def __str__(self):
+        return self.description
+    
+# ====================================================================
+# 17. NUEVO: Conversación (Inbox)
+# ====================================================================
+class Conversation(models.Model):
+    """
+    Representa un hilo de chat.
+    Si es un grupo, AHORA se vincula a un Curso.
+    """
+    # --- ¡CAMPO NUEVO! ---
+    course = models.ForeignKey(
+        Course, 
+        on_delete=models.SET_NULL, 
+        related_name='chat_group', 
+        null=True, 
+        blank=True, 
+        help_text="El curso al que este grupo pertenece, si es un grupo."
+    )
+    
+    name = models.CharField(
+        max_length=100, 
+        blank=True, 
+        null=True, 
+        help_text="Nombre del grupo (ej: 'Curso: Python Básico')"
+    )
+    is_group = models.BooleanField(default=False)
+    participants = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name='conversations'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        if self.is_group and self.name:
+            return f"Grupo: {self.name}"
+        return f"Conversación {self.id}"
+
+# ====================================================================
+# 18. NUEVO: Mensaje (Inbox)
+# ====================================================================
+class Message(models.Model):
+    """
+    Un único mensaje dentro de una Conversación.
+    Soporta 'TEXT', 'CODE', 'IMAGE' y 'FILE'.
+    """
+    MESSAGE_TYPE_CHOICES = (
+        ('TEXT', 'Texto'),
+        ('CODE', 'Código'),
+        ('IMAGE', 'Imagen'), # <-- ¡NUEVO!
+        ('FILE', 'Archivo'),   # <-- ¡NUEVO! (Para PDFs, ZIPs, etc.)
+    )
+    
+    conversation = models.ForeignKey(
+        Conversation,
+        on_delete=models.CASCADE,
+        related_name='messages'
+    )
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='sent_messages'
+    )
+    
+    message_type = models.CharField(
+        max_length=10, 
+        choices=MESSAGE_TYPE_CHOICES, 
+        default='TEXT'
+    )
+    
+    # --- ¡CAMBIO! ---
+    # El contenido ahora es opcional, ya que el mensaje puede ser solo un archivo.
+    content = models.TextField(blank=True, null=True)
+    
+    language = models.CharField(
+        max_length=20, 
+        blank=True, 
+        null=True, 
+        help_text="Ej: python (usado si el tipo es 'CODE')"
+    )
+    
+    # --- ¡NUEVO CAMPO! ---
+    # Aquí es donde guardaremos la URL al archivo (imagen, video, pdf, etc.)
+    file_upload = models.FileField(
+        upload_to='chat_files/', # Los archivos se guardarán en /media/chat_files/
+        blank=True, 
+        null=True
+    )
+    file_name = models.CharField(
+        max_length=255, 
+        blank=True, 
+        null=True, 
+        help_text="Nombre original del archivo"
+    )
+    file_size = models.BigIntegerField(
+        blank=True, 
+        null=True, 
+        help_text="Tamaño del archivo en bytes"
+    )
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['timestamp'] 
+
+    def __str__(self):
+        return f"Mensaje de {self.sender.username} ({self.timestamp.strftime('%Y-%m-%d %H:%M')})"

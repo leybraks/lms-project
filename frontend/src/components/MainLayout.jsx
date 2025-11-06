@@ -1,11 +1,9 @@
-// frontend/src/components/MainLayout.jsx
-
 import React, { useState } from 'react';
 import { Outlet, Link as RouterLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useColorMode } from '../context/ThemeContext'; 
 import { useTheme } from '@mui/material/styles'; 
-import { AnimatePresence, motion } from "framer-motion"; // <-- ¡Importante!
+import { AnimatePresence, motion } from "framer-motion"; 
 
 
 import { 
@@ -150,9 +148,9 @@ function MainLayout() {
                     <ListItemIcon><EmailIcon /></ListItemIcon>
                     <ListItemText primary="Inbox" />
                 </ListItemButton>
-                <ListItemButton component={RouterLink} to="/" selected={location.pathname.startsWith('/courses')}>
+                <ListItemButton component={RouterLink} to="/courses" selected={location.pathname.startsWith('/courses')}>
                     <ListItemIcon><MenuBookIcon /></ListItemIcon>
-                    <ListItemText primary="Lesson" />
+                    <ListItemText primary="Cursos" /> {/* (Quizás quieras renombrar esto a "Cursos") */}
                 </ListItemButton>
                 <ListItemButton component={RouterLink} to="/" selected={location.pathname === '/tasks'}>
                     <ListItemIcon><AssignmentIcon /></ListItemIcon>
@@ -198,17 +196,16 @@ function MainLayout() {
         </Box>
       </Drawer>
       
-      {/* 3. CONTENIDO PRINCIPAL (Outlet) - ¡AQUÍ ESTÁN LOS CAMBIOS! */}
+      {/* 3. CONTENIDO PRINCIPAL (Outlet) - ¡AQUÍ ESTÁ LA CORRECCIÓN! */}
       <Box
         component="main"
         sx={{
           flexGrow: 1,
-          p: 3,
+          // p: 3, // <-- ¡Eliminado!
           width: `calc(100% - ${drawerWidth}px)`,
           mt: '80px',
-          height: 'calc(100vh - 80px)', // <-- Altura correcta
+          height: 'calc(100vh - 80px)', // Altura fija del área de contenido
           position: "relative"
-          // <-- ¡ELIMINAMOS 'overflow: hidden'!
         }}
       >
         <AnimatePresence mode="wait">
@@ -221,8 +218,10 @@ function MainLayout() {
             exit={{ opacity: 0, x: -20 }}
             transition={{ duration: 0.3, ease: "easeInOut" }}
             
-            // <-- ¡ELIMINAMOS EL 'style' con 'overflow: hidden'!
-            // 'HomePage' ahora controlará su propio scroll
+            // --- ¡LA CORRECCIÓN! ---
+            // Le damos 100% de altura al div de animación
+            // para que el Outlet (y tu InboxPage) la hereden.
+            style={{ height: '100%' }}
           >
             <Outlet />
           </motion.div>

@@ -226,11 +226,19 @@ function HomePage() {
   // --- RENDER PRINCIPAL ---
   return (
     <Box 
+
       component={motion.div} // <-- ¡Contenedor de Animación!
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      sx={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}
+      sx={{ 
+        height: '100%', 
+        width: '100%',
+        p: 3, 
+        boxSizing: 'border-box',
+        overflowY: 'auto', 
+        ...getScrollbarStyles(theme)
+      }}
     >
       
       {/* Encabezado (Item de Animación) */}

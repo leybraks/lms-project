@@ -3,6 +3,8 @@
 from django.urls import path
 # ¡ESTA ES LA IMPORTACIÓN CORREGIDA!
 # Usamos los nombres exactos definidos en api/views.py
+from django.conf import settings # Importa
+from django.conf.urls.static import static
 from .views import (
     ListaDeCursosView, 
     DetalleDeCursoView, 
@@ -17,6 +19,10 @@ from .views import (
     QuizDetailView,
     UpcomingLessonsView,
     MyMentorsView,
+    MessageListView,
+    ContactListView,
+    StartDirectMessageView, # <-- Esta la vamos a borrar
+    GroupChatListView,
     get_dashboard_stats,
     get_me_view # Importamos esta también, ya que existe en views.py
 ) 
@@ -43,5 +49,14 @@ urlpatterns = [
     path('dashboard/stats/', get_dashboard_stats, name='dashboard-stats'),
     path('dashboard/upcoming_lessons/', UpcomingLessonsView.as_view(), name='dashboard-upcoming'),
     path('dashboard/my_mentors/', MyMentorsView.as_view(), name='dashboard-my-mentors'),
+    path('completions/', LessonCompleteView.as_view(), name='lesson-complete'), 
+    path('completions/my_completions/', MyLessonCompletionsListView.as_view(), name='my-completions'),
+    path('inbox/group_chats/', GroupChatListView.as_view(), name='group-chat-list'), # (Nueva)
+    path('inbox/conversations/<int:conversation_id>/messages/', MessageListView.as_view(), name='message-list-create'),
+    path('inbox/contacts/', ContactListView.as_view(), name='contact-list'),
+    path('inbox/start_dm/', StartDirectMessageView.as_view(), name='start-direct-message'),
+    path('courses/all/', ListaDeCursosView.as_view(), name='course-list-all'),
 ]
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 

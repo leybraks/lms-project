@@ -1,17 +1,18 @@
 # backend/api/views.py
 
 from rest_framework import viewsets, generics, status
+from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from .permissions import IsEnrolledPermission
-
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
-
+from django.db.models import Max, Count
+from rest_framework.exceptions import PermissionDenied
 # Imports de Modelos y Serializers de tu app
-from .models import Course, Enrollment, Lesson, LessonCompletion, Assignment, Submission, Quiz, User
-from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer, AssignmentSerializer, SubmissionSerializer, QuizSerializer
-
+from .models import Course, Enrollment, Lesson, LessonCompletion, Assignment, Submission, Quiz, User,Conversation, Message
+from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer, AssignmentSerializer, SubmissionSerializer, QuizSerializer,ConversationListSerializer,MessageSerializer, MessageCreateSerializer 
 # ====================================================================
 # 1. Vistas de Cursos
 # ====================================================================
@@ -31,11 +32,19 @@ class CourseViewSet(viewsets.ModelViewSet):
     
 class ListaDeCursosView(generics.ListAPIView):
     """
-    Devuelve una lista de todos los cursos (Usado en el Home Page del frontend).
+    Devuelve una lista de todos los cursos (Usado en el Catálogo del frontend).
+    AHORA ESTÁ OPTIMIZADO.
     """
-    queryset = Course.objects.all()
     serializer_class = CourseSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated] # O [AllowAny] si quieres que todos vean los cursos
+
+    def get_queryset(self):
+        # 1. Solo muestra cursos que están 'publicados'
+        # 2. Usa 'select_related' para traer al profesor en la misma consulta (eficiente)
+        # 3. Usa 'annotate' para contar los módulos de cada curso (súper eficiente)
+        return Course.objects.filter(is_published=True) \
+                             .select_related('professor') \
+                             .annotate(modules_count=Count('modules'))
 
 class DetalleDeCursoView(generics.RetrieveAPIView):
     """
@@ -358,3 +367,183 @@ class MyMentorsView(generics.ListAPIView):
             role='PROFESSOR',
             courses_taught__enrollments__user=user
         ).distinct()
+
+# ====================================================================
+# NUEVA VISTA: Lista de Conversaciones (Inbox)
+# ====================================================================
+class GroupChatListView(generics.ListAPIView):
+    """
+    Devuelve todos los chats grupales (cursos)
+    en los que el usuario actual participa.
+    """
+    serializer_class = ConversationListSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Devuelve solo las conversaciones que son de GRUPO
+        return self.request.user.conversations.filter(
+            is_group=True
+        ).annotate(
+            last_message_time=Max('messages__timestamp')
+        ).order_by('-last_message_time')
+
+# ====================================================================
+# ACTUALIZADO: Lista/Creación de Mensajes (Chat Activo)
+# ====================================================================
+class MessageListView(generics.ListCreateAPIView):
+    """
+    GET: Devuelve todos los mensajes de una conversación específica.
+    POST: Crea un nuevo mensaje en esa conversación.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get_conversation(self):
+        """ Helper para obtener y validar la conversación """
+        conversation_id = self.kwargs['conversation_id']
+        conversation = get_object_or_404(Conversation, id=conversation_id)
+        
+        # Comprueba que el usuario sea participante
+        if not self.request.user in conversation.participants.all():
+            raise PermissionDenied("No tienes permiso para ver esta conversación.")
+        return conversation
+
+    def get_serializer_class(self):
+        # Usa un serializer diferente para GET (leer) vs POST (crear)
+        if self.request.method == 'POST':
+            return MessageCreateSerializer
+        return MessageSerializer # <-- Este es el serializer "completo"
+
+    def get_queryset(self):
+        # Obtiene la conversación (ya incluye la validación de permisos)
+        conversation = self.get_conversation()
+        # Devuelve los mensajes de esa conversación
+        return conversation.messages.all().order_by('timestamp')
+
+    def perform_create(self, serializer):
+        conversation = self.get_conversation()
+        
+        # --- ¡LÓGICA ACTUALIZADA! ---
+        file_name = None
+        file_size = None
+
+        # Revisa si hay un archivo en la petición
+        if 'file_upload' in self.request.FILES:
+            file = self.request.FILES['file_upload']
+            file_name = file.name
+            file_size = file.size
+        
+        # Guarda todo junto
+        serializer.save(
+            sender=self.request.user, 
+            conversation=conversation,
+            file_name=file_name,
+            file_size=file_size
+        )
+    # --- ¡¡¡AQUÍ ESTÁ LA CORRECCIÓN!!! ---
+    # Sobrescribimos el método 'create' para cambiar lo que devuelve
+    def create(self, request, *args, **kwargs):
+        # 1. Usar el serializer de CREACIÓN para validar la data de entrada
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # 2. Guardar el objeto (perform_create se llamará automáticamente)
+        self.perform_create(serializer)
+        
+        # 3. ¡LA CLAVE!
+        # En lugar de devolver serializer.data (que es el de creación),
+        # creamos un nuevo serializer (el COMPLETO, 'MessageSerializer')
+        # con la instancia que acabamos de crear (serializer.instance)
+        # y devolvemos SUS datos.
+        
+        # Usamos MessageSerializer (el de GET) para la respuesta
+        read_serializer = MessageSerializer(serializer.instance, context=self.get_serializer_context())
+        
+        headers = self.get_success_headers(read_serializer.data)
+        return Response(read_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+# ====================================================================
+# NUEVA VISTA: Lista de "Contactos" (Compañeros y Profesores)
+# ====================================================================
+class ContactListView(generics.ListAPIView):
+    """
+    Devuelve una lista de todos los usuarios (compañeros y profesores)
+    que comparten al menos un curso con el usuario actual.
+    """
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        
+        # 1. Obtener los IDs de los cursos en los que el usuario está inscrito
+        enrolled_course_ids = Enrollment.objects.filter(user=user).values_list('course_id', flat=True)
+        
+        if not enrolled_course_ids:
+            return User.objects.none() # No devolver nada si no está en cursos
+            
+        # 2. Obtener los IDs de los profesores de esos cursos
+        professor_ids = Course.objects.filter(
+            id__in=enrolled_course_ids
+        ).values_list('professor_id', flat=True)
+        
+        # 3. Obtener los IDs de todos los alumnos (compañeros) en esos cursos
+        classmate_ids = Enrollment.objects.filter(
+            course_id__in=enrolled_course_ids
+        ).values_list('user_id', flat=True)
+        
+        # 4. Combinar todos los IDs (usando 'set' para eliminar duplicados)
+        all_related_ids = set(professor_ids) | set(classmate_ids)
+        
+        # 5. Devolver los objetos User, excluyendo al propio usuario
+        return User.objects.filter(
+            id__in=all_related_ids
+        ).exclude(id=user.id)
+
+
+# ====================================================================
+# NUEVA VISTA: Iniciar un Mensaje Directo (1-a-1)
+# ====================================================================
+class StartDirectMessageView(APIView):
+    """
+    POST: Inicia o recupera una conversación 1-a-1 con otro usuario.
+    Espera: { "user_id": <id_del_otro_usuario> }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        target_user_id = request.data.get('user_id')
+        if not target_user_id:
+            return Response({"detail": "Se requiere 'user_id'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            target_user = User.objects.get(id=target_user_id)
+        except User.DoesNotExist:
+            return Response({"detail": "Usuario no encontrado."}, status=status.HTTP_4404_NOT_FOUND)
+            
+        user = request.user
+        
+        # 1. Buscar si ya existe una conversación 1-a-1 (no-grupo)
+        #    que tenga exactamente a estos dos participantes.
+        existing_convo = Conversation.objects.annotate(
+            num_participants=Count('participants') # <--- ¡CORREGIDO!
+        ).filter(
+            is_group=False,
+            num_participants=2,
+            participants=user
+        ).filter(
+            participants=target_user
+        ).first()
+        
+        # 2. Si ya existe, devolverla
+        if existing_convo:
+            # Usamos ConversationListSerializer (como en tu código)
+            serializer = ConversationListSerializer(existing_convo, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        # 3. Si no existe, crearla
+        new_convo = Conversation.objects.create(is_group=False)
+        new_convo.participants.add(user, target_user)
+        
+        # Serializar y devolver la nueva conversación
+        serializer = ConversationListSerializer(new_convo, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)

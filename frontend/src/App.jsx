@@ -8,6 +8,8 @@ import LessonPage from './pages/LessonPage';
 import QuizPage from './pages/QuizPage'; // <-- 1. ¡IMPORTA LA NUEVA PÁGINA!
 import PrivateRoute from './components/PrivateRoute'; 
 import MainLayout from './components/MainLayout'; 
+import InboxPage from './pages/InboxPage';
+import CourseCatalogPage from './pages/CourseCatalogPage';
 
 function App() {
   return (
@@ -21,7 +23,8 @@ function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/courses/:courseId" element={<CourseDetailPage />} />
               <Route path="/courses/:courseId/lessons/:lessonId" element={<LessonPage />} /> 
-              
+              <Route path="/inbox" element={<InboxPage />} />
+              <Route path="/courses" element={<CourseCatalogPage />} />
               {/* 2. ¡AÑADE LA NUEVA RUTA DEL EXAMEN! */}
               <Route 
                 path="/courses/:courseId/modules/:moduleId/quiz" 
