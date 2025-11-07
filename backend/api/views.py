@@ -9,10 +9,11 @@ from .permissions import IsEnrolledPermission
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.db.models import Max, Count
+from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 # Imports de Modelos y Serializers de tu app
-from .models import Course, Enrollment, Lesson, LessonCompletion, Assignment, Submission, Quiz, User,Conversation, Message
-from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer, AssignmentSerializer, SubmissionSerializer, QuizSerializer,ConversationListSerializer,MessageSerializer, MessageCreateSerializer 
+from .models import Course, Enrollment, Lesson, LessonCompletion, Assignment, Submission, Quiz, User,Conversation, Message,LessonNote
+from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer, AssignmentSerializer, SubmissionSerializer, QuizSerializer,ConversationListSerializer,MessageSerializer, MessageCreateSerializer, LessonNoteSerializer
 # ====================================================================
 # 1. Vistas de Cursos
 # ====================================================================
@@ -212,11 +213,15 @@ class AssignmentDetailView(generics.RetrieveAPIView):
     lookup_url_kwarg = 'lesson_id' # El nombre del parámetro en la URL
 
 # ====================================================================
-# NUEVA VISTA: Crear/Actualizar una Entrega (Submission)
+# ACTUALIZADO: Crear/Actualizar una Entrega (Submission)
+# ====================================================================
+# ====================================================================
+# ACTUALIZADO: Crear/Actualizar una Entrega (Submission)
 # ====================================================================
 class SubmissionCreateUpdateView(generics.CreateAPIView):
     """
-    Permite a un usuario crear (POST) una entrega para una Tarea.
+    Permite a un usuario crear (POST) o actualizar (PUT/PATCH) una entrega.
+    AHORA VERIFICA 'allow_edits' y 'due_date'.
     """
     queryset = Submission.objects.all()
     serializer_class = SubmissionSerializer
@@ -225,23 +230,61 @@ class SubmissionCreateUpdateView(generics.CreateAPIView):
     def create(self, request, *args, **kwargs):
         assignment_id = request.data.get('assignment_id')
         content = request.data.get('content')
+        file = request.FILES.get('file_submission')
         
-        if not assignment_id or not content:
+        if not assignment_id:
             return Response(
-                {"detail": "Se requiere 'assignment_id' y 'content'."}, 
+                {"detail": "Se requiere 'assignment_id'."}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        if not content and not file:
+             return Response(
+                {"detail": "Se requiere 'content' o 'file_submission'."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         assignment = get_object_or_404(Assignment, id=assignment_id)
         user = request.user
+        
+        # --- ¡¡¡NUEVA LÓGICA DE VALIDACIÓN!!! ---
+        
+        # 1. Buscar si ya existe una entrega
+        existing_submission = Submission.objects.filter(user=user, assignment=assignment).first()
+        
+        # 2. Verificar la fecha de entrega
+        if assignment.due_date and timezone.now() > assignment.due_date:
+            return Response(
+                {"detail": "La fecha límite de entrega ya ha pasado."}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        # 3. Verificar si se permiten ediciones (si ya existe una entrega)
+        if existing_submission and not assignment.allow_edits:
+            return Response(
+                {"detail": "Esta tarea no permite editar la entrega."}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        # --- FIN DE LA VALIDACIÓN ---
 
-        # TODO: Verificar si el usuario está inscrito en el curso de esta tarea
-
-        # Buscar si ya existe una entrega (para actualizarla en lugar de crear una nueva)
+        file_name = None
+        file_size = None
+        if file:
+            file_name = file.name
+            file_size = file.size
+        
+        # Usar 'update_or_create' para manejar re-entregas
         submission, created = Submission.objects.update_or_create(
             user=user, 
             assignment=assignment,
-            defaults={'content': content, 'status': 'SUBMITTED'}
+            defaults={
+                'content': content, 
+                'file_submission': file, 
+                'file_name': file_name,
+                'file_size': file_size,
+                'status': 'SUBMITTED' # Re-envía como 'SUBMITTED'
+            }
         )
         
         serializer = self.get_serializer(submission)
@@ -250,7 +293,7 @@ class SubmissionCreateUpdateView(generics.CreateAPIView):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         else:
             return Response(serializer.data, status=status.HTTP_200_OK)
-        
+
 class MySubmissionsListView(generics.ListAPIView):
     """
     Muestra todas las entregas (submissions) del usuario logueado.
@@ -547,3 +590,31 @@ class StartDirectMessageView(APIView):
         # Serializar y devolver la nueva conversación
         serializer = ConversationListSerializer(new_convo, context={'request': request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+# ====================================================================
+# NUEVA VISTA: ViewSet de Apuntes de Lección
+# ====================================================================
+class LessonNoteViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint para el "Bloc de Notas" de un alumno.
+    Permite (GET) listar, (POST) crear, (PUT/PATCH) actualizar, y (DELETE) borrar
+    apuntes para una lección específica.
+    """
+    serializer_class = LessonNoteSerializer
+    permission_classes = [IsAuthenticated] # Solo el usuario logueado
+
+    def get_queryset(self):
+        """
+        Filtra las notas para que solo muestre las del usuario actual
+        Y para la lección especificada en la URL.
+        """
+        user = self.request.user
+        lesson_id = self.kwargs['lesson_id'] # Obtiene el 'lesson_id' de la URL
+        return LessonNote.objects.filter(user=user, lesson_id=lesson_id)
+
+    def perform_create(self, serializer):
+        """
+        Inyecta automáticamente el 'user' y la 'lesson' al crear una nota.
+        """
+        lesson = get_object_or_404(Lesson, id=self.kwargs['lesson_id'])
+        serializer.save(user=self.request.user, lesson=lesson)

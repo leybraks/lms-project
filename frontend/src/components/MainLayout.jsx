@@ -128,7 +128,6 @@ function MainLayout() {
         variant="permanent"
         anchor="left"
       >
-        {/* ... (Todo el contenido de tu Drawer sigue igual aquí) ... */}
         <Toolbar sx={{ justifyContent: 'flex-start', alignItems: 'center', py: 2, pl: 3, height: 80 }}>
             <Typography variant="h5" color="primary.main" sx={{ fontWeight: 700 }}>
                 Coursue
@@ -150,7 +149,7 @@ function MainLayout() {
                 </ListItemButton>
                 <ListItemButton component={RouterLink} to="/courses" selected={location.pathname.startsWith('/courses')}>
                     <ListItemIcon><MenuBookIcon /></ListItemIcon>
-                    <ListItemText primary="Cursos" /> {/* (Quizás quieras renombrar esto a "Cursos") */}
+                    <ListItemText primary="Cursos" />
                 </ListItemButton>
                 <ListItemButton component={RouterLink} to="/" selected={location.pathname === '/tasks'}>
                     <ListItemIcon><AssignmentIcon /></ListItemIcon>
@@ -201,11 +200,10 @@ function MainLayout() {
         component="main"
         sx={{
           flexGrow: 1,
-          // p: 3, // <-- ¡Eliminado!
           width: `calc(100% - ${drawerWidth}px)`,
           mt: '80px',
           height: 'calc(100vh - 80px)', // Altura fija del área de contenido
-          position: "relative"
+          position: "relative" // Clave para que el 'absolute' de motion.div funcione
         }}
       >
         <AnimatePresence mode="wait">
@@ -213,15 +211,16 @@ function MainLayout() {
             key={location.pathname}
             
             // --- Animación de deslizamiento lateral ---
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
+
             
-            // --- ¡LA CORRECCIÓN! ---
-            // Le damos 100% de altura al div de animación
-            // para que el Outlet (y tu InboxPage) la hereden.
-            style={{ height: '100%' }}
+            // === ¡LA CORRECCIÓN DEFINITIVA! ===
+            // Esto hace que la página que entra y la que sale
+            // se apilen en el mismo lugar, evitando "saltos".
+            style={{
+              position: 'absolute',
+              width: '100%',
+              height: '100%'
+            }}
           >
             <Outlet />
           </motion.div>

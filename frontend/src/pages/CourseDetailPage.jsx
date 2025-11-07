@@ -214,25 +214,39 @@ function CourseDetailPage() {
     >
       
       {/* 1. SECCIÓN HERO (Banner "Fusionado") */}
+{/* 1. SECCIÓN HERO (Banner "Fusionado") */}
       <Box 
         sx={{ 
-          // Padding vertical reducido para ser más compacto
+          // El Box exterior ahora solo da el 'padding' vertical 
+          // para separar el banner del resto de la página.
           py: { xs: 3, md: 4 }, 
-          px: { xs: 2, md: 3 }, 
-          
-          // === CAMBIO 1: BORDES REDONDEADOS ===
-          // Redondea solo las esquinas inferiores en pantallas medianas o más grandes
-          borderRadius: { xs: 0, md: `0 0 ${theme.shape.borderRadius * 3}px ${theme.shape.borderRadius * 3}px` },
-          // === FIN DEL CAMBIO 1 ===
-
-          background: `linear-gradient(135deg, ${theme.palette.primary.dark}, ${theme.palette.primary.main})`,
-          color: 'primary.contrastText', // <-- Todo el texto aquí será blanco
         }}
       >
-        <Container maxWidth="lg">
+        {/* === CAMBIO 1: ESTILOS MOVIDOS AL CONTAINER === */}
+        {/* Ahora el Container tiene el fondo morado y los bordes redondeados */}
+        <Container 
+          maxWidth="xl" 
+          sx={{
+            background: `linear-gradient(135deg, ${theme.palette.primary.dark}, ${theme.palette.primary.main})`,
+            color: 'primary.contrastText',
+            // Padding interno del banner
+            py: { xs: 3, md: 4 }, 
+            px: { xs: 2, md: 3 }, 
+            // Bordes redondeados en TODAS las esquinas
+            borderRadius: 4, // 16px (consistente con tu cleanPaperStyle)
+          }}
+        >
           <motion.div variants={itemVariants}>
-            {/* Contenido alineado arriba */}
-            <Grid container spacing={4} sx={{ alignItems: 'flex-start' }}> 
+            
+            {/* === CAMBIO 2: SEPARACIÓN DE CONTENIDO === */}
+            <Grid 
+              container 
+              spacing={4} 
+              sx={{ 
+                alignItems: 'flex-start',
+                justifyContent: 'space-between' // <-- ¡Esta es la magia!
+              }}
+            > 
               
               {/* --- LADO IZQUIERDO DEL HERO: "LA VENTA" --- */}
               <Grid item xs={12} md={7}>
@@ -351,7 +365,7 @@ function CourseDetailPage() {
       </Box>
 
       {/* 2. CONTENIDO PRINCIPAL (Columna ancha, como pediste) */}
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4, px: {xs: 2, md: 3} }}>
+      <Container maxWidth="xl" sx={{ mt: 4, mb: 4, px: {xs: 2, md: 3} }}>
         
         {/* === CAMBIO 2: ANCHO DEL CONTENIDO === */}
         {/* Se quitó 'justifyContent="center"' para que el Grid ocupe todo el espacio */}

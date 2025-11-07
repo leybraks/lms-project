@@ -1,10 +1,11 @@
 # backend/api/urls.py
 
-from django.urls import path
+from django.urls import path, include
 # ¡ESTA ES LA IMPORTACIÓN CORREGIDA!
 # Usamos los nombres exactos definidos en api/views.py
 from django.conf import settings # Importa
 from django.conf.urls.static import static
+from rest_framework.routers import DefaultRouter
 from .views import (
     ListaDeCursosView, 
     DetalleDeCursoView, 
@@ -23,9 +24,19 @@ from .views import (
     ContactListView,
     StartDirectMessageView, # <-- Esta la vamos a borrar
     GroupChatListView,
+    LessonNoteViewSet,
     get_dashboard_stats,
     get_me_view # Importamos esta también, ya que existe en views.py
 ) 
+
+# --- Define un router (si no tienes uno) ---
+router = DefaultRouter()
+# Registra el ViewSet para la ruta: /api/lessons/<lesson_id>/notes/
+router.register(
+    r'lessons/(?P<lesson_id>\d+)/notes', 
+    LessonNoteViewSet, 
+    basename='lesson-notes'
+)
 
 urlpatterns = [
     # Rutas de Cursos (usan las vistas corregidas)
@@ -56,6 +67,7 @@ urlpatterns = [
     path('inbox/contacts/', ContactListView.as_view(), name='contact-list'),
     path('inbox/start_dm/', StartDirectMessageView.as_view(), name='start-direct-message'),
     path('courses/all/', ListaDeCursosView.as_view(), name='course-list-all'),
+    path('', include(router.urls)),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

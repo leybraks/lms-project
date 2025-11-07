@@ -175,7 +175,10 @@ class Assignment(models.Model):
 # 8. Modelo de Entrega (Submission) - (Versión Limpia)
 # ====================================================================
 class Submission(models.Model):
-    """La respuesta de un Estudiante a una Tarea (Assignment)."""
+    """
+    La respuesta de un Estudiante a una Tarea (Assignment).
+    AHORA SOPORTA SUBIDA DE ARCHIVOS.
+    """
     STATUS_CHOICES = [
         ('PENDING', 'Pendiente'),
         ('SUBMITTED', 'Entregado'),
@@ -192,9 +195,24 @@ class Submission(models.Model):
         on_delete=models.CASCADE,
         related_name='submissions'
     )
+    
+    # --- ¡CAMBIOS AQUÍ! ---
     content = models.TextField(
-        help_text="Respuesta de texto del estudiante."
+        blank=True, 
+        null=True, 
+        help_text="Respuesta de texto (opcional si se envía un archivo)"
     )
+    
+    # --- ¡NUEVOS CAMPOS! ---
+    file_submission = models.FileField(
+        upload_to='submissions/', # Se guardará en /media/submissions/
+        blank=True,
+        null=True
+    )
+    file_name = models.CharField(max_length=255, blank=True, null=True)
+    file_size = models.BigIntegerField(blank=True, null=True)
+    # --- FIN DE CAMBIOS ---
+    
     status = models.CharField(
         max_length=10,
         choices=STATUS_CHOICES,
@@ -488,3 +506,23 @@ class Message(models.Model):
 
     def __str__(self):
         return f"Mensaje de {self.sender.username} ({self.timestamp.strftime('%Y-%m-%d %H:%M')})"
+    
+
+# ====================================================================
+# 19. NUEVO: Apuntes de Lección (Para el "Bloc de Notas")
+# ====================================================================
+class LessonNote(models.Model):
+    """
+    Un único apunte o "nota" que un usuario toma para una lección específica.
+    """
+    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, related_name='notes')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='lesson_notes')
+    content = models.TextField()
+    is_completed = models.BooleanField(default=False, help_text="Para usarlo como 'lista de tareas'")
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['created_at'] # Las notas más nuevas al final
+
+    def __str__(self):
+        return f"Nota de {self.user.username} en {self.lesson.title}"

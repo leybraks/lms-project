@@ -19,7 +19,8 @@ from .models import (
     Requirement,
     CourseBenefit,
     Conversation,
-    Message
+    Message,
+    LessonNote
 )
 
 class LearningObjectiveSerializer(serializers.ModelSerializer):
@@ -227,16 +228,29 @@ class AssignmentSerializer(serializers.ModelSerializer):
 
 # 9. Serializer de Entrega (Submission)
 class SubmissionSerializer(serializers.ModelSerializer):
+    """
+    Serializer para LEER y CREAR entregas.
+    Ahora maneja 'file_submission'.
+    """
+    user = UserSerializer(read_only=True)
     assignment_id = serializers.IntegerField(write_only=True)
-    user = UserSerializer(read_only=True) 
 
     class Meta:
         model = Submission
         fields = [
             'id', 'assignment', 'user', 'content', 
-            'status', 'submitted_at', 'assignment_id'
+            'status', 'submitted_at', 'assignment_id',
+            'file_submission', 'file_name', 'file_size' # <-- ¡AÑADIDOS!
         ]
-        read_only_fields = ['assignment', 'status', 'submitted_at']
+        read_only_fields = [
+            'assignment', 'status', 'submitted_at', 
+            'file_name', 'file_size' # El backend los asignará
+        ]
+        
+        # Hacemos 'content' opcional
+        extra_kwargs = {
+            'content': {'required': False, 'allow_null': True, 'allow_blank': True},
+        }
 
 # 10. Serializer de Nota (Grade)
 class GradeSerializer(serializers.ModelSerializer):
@@ -393,3 +407,17 @@ class ConversationListSerializer(serializers.ModelSerializer):
         if not last_msg:
             return obj.created_at
         return last_msg.timestamp
+    
+# ====================================================================
+# NUEVO: Serializer de Apuntes de Lección
+# ====================================================================
+class LessonNoteSerializer(serializers.ModelSerializer):
+    """
+    Serializer para leer, crear, y actualizar un apunte.
+    El 'user' y 'lesson' se inyectarán desde la vista.
+    """
+    class Meta:
+        model = LessonNote
+        # Enviamos 'lesson' también para que el frontend pueda (opcionalmente) confirmar
+        fields = ['id', 'lesson', 'content', 'is_completed', 'created_at']
+        read_only_fields = ['lesson']
