@@ -2,6 +2,7 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.conf import settings
 
+
 # ====================================================================
 # 1. Modelo de Usuario
 # ====================================================================
@@ -100,7 +101,6 @@ class Module(models.Model):
 # 5. Modelo de Lección (Lesson)
 # ====================================================================
 class Lesson(models.Model):
-    """Una Lección individual dentro de un Módulo."""
     module = models.ForeignKey(
         Module, 
         on_delete=models.CASCADE, 
@@ -110,13 +110,29 @@ class Lesson(models.Model):
     order = models.PositiveIntegerField(default=0) 
     content = models.TextField(blank=True)
     video_url = models.URLField(blank=True, null=True)
+    live_session_room = models.CharField(
+        max_length=100, 
+        blank=True, 
+        null=True, 
+        help_text="Nombre de la sala para la clase en vivo"
+    )
+    
+    # --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
+    # Usamos 'Conversation' (como string) porque el modelo
+    # Conversation se define MÁS ADELANTE en este mismo archivo.
+    chat_conversation = models.OneToOneField(
+        'Conversation', # <-- ¡ARREGLADO!
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='lesson_chat'
+    )
 
     class Meta:
         ordering = ['order']
 
     def __str__(self):
         return f'{self.module.title} - Lección {self.order}: {self.title}'
-    
 # ====================================================================
 # 6. Modelo de Progreso (LessonCompletion)
 # ====================================================================

@@ -56,40 +56,41 @@ class LessonSerializer(serializers.ModelSerializer):
     module_id = serializers.ReadOnlyField(source='module.id')
     course_id = serializers.ReadOnlyField(source='module.course.id')
     
-    # --- ¡NUEVOS CAMPOS DE NAVEGACIÓN! ---
     next_lesson_id = serializers.SerializerMethodField()
     prev_lesson_id = serializers.SerializerMethodField()
+    
     resources = ResourceSerializer(many=True, read_only=True)
+    
+    # --- ¡¡¡AÑADE ESTE CAMPO!!! ---
+    # Esto envía el ID (un número) de la conversación de chat
+    chat_conversation = serializers.PrimaryKeyRelatedField(read_only=True) 
+
     class Meta:
         model = Lesson
         fields = [
             'id', 'title', 'order', 'content', 'video_url', 
+            'live_session_room',
             'module_id', 'course_id',
-            'next_lesson_id', 'prev_lesson_id','resources' # <-- Añadir a la lista
+            'next_lesson_id', 'prev_lesson_id',
+            'resources',
+            'chat_conversation' # <-- ¡AÑADIDO A LA LISTA!
         ]
     
+    # --- (Si no tienes estas funciones, añádelas) ---
     def _get_adjacent_lesson(self, obj, direction='next'):
-        """
-        Lógica para encontrar la lección adyacente (siguiente o anterior).
-        Por ahora, solo busca dentro del mismo módulo.
-        """
         if direction == 'next':
-            # Busca la lección con el 'order' inmediatamente superior
             query = Lesson.objects.filter(
                 module=obj.module, 
                 order__gt=obj.order
             ).order_by('order').first()
         else: # 'prev'
-            # Busca la lección con el 'order' inmediatamente inferior
             query = Lesson.objects.filter(
                 module=obj.module, 
                 order__lt=obj.order
             ).order_by('-order').first()
-            
         return query.id if query else None
 
     def get_next_lesson_id(self, obj):
-        # obj es la instancia de Lesson
         return self._get_adjacent_lesson(obj, 'next')
 
     def get_prev_lesson_id(self, obj):
