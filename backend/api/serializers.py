@@ -421,3 +421,43 @@ class LessonNoteSerializer(serializers.ModelSerializer):
         # Enviamos 'lesson' también para que el frontend pueda (opcionalmente) confirmar
         fields = ['id', 'lesson', 'content', 'is_completed', 'created_at']
         read_only_fields = ['lesson']
+
+class GradeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Grade
+        fields = ['score', 'comments', 'graded_at']
+
+class GradedItemSerializer(serializers.ModelSerializer):
+    """
+    Serializer para una Tarea (Assignment).
+    Muestra la entrega (Submission) y la nota (Grade) del usuario actual.
+    """
+    submission = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Assignment # La base de nuestra lista son las Tareas
+        fields = ['id', 'title', 'due_date', 'submission']
+
+    def get_submission(self, obj):
+        """
+        Busca la entrega y nota solo para el usuario que hace la petición.
+        """
+        user = self.context['request'].user
+        
+        try:
+            # Busca la entrega
+            submission = Submission.objects.get(assignment=obj, user=user)
+            
+            # Prepara la data de la nota (si existe)
+            grade_data = None
+            if hasattr(submission, 'grade'):
+                grade_data = GradeSerializer(submission.grade).data
+                
+            # Devuelve un objeto con todo
+            return {
+                'status': submission.status,
+                'submitted_at': submission.submitted_at,
+                'grade': grade_data # Esto será un objeto o None
+            }
+        except Submission.DoesNotExist:
+            return None # El usuario no ha entregado esta tarea

@@ -48,6 +48,9 @@ import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import EditIcon from '@mui/icons-material/Edit';
+import AssessmentIcon from '@mui/icons-material/Assessment';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 
 // === VARIANTES DE ANIMACIÓN (Sin cambios) ===
 const containerVariants = {
@@ -128,13 +131,8 @@ function TabPanel(props) {
   );
 }
 
-// --- Componente Maqueta (Chat) ¡¡¡SIN EL USEEFFECT!!! ---
+// --- Componente Maqueta (Chat) (Sin cambios) ---
 const LessonChat = ({ theme }) => {
-  // const messagesEndRef = useRef(null);
-  // useEffect(() => {
-  //   messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  // }, []); // <-- Este era el problema, ¡eliminado!
-
   return (
     <Box sx={{height: '100%', display: 'flex', flexDirection: 'column'}}>
       <Box sx={{ flex: 1, overflowY: 'auto', p: 2, ...getScrollbarStyles(theme) }}>
@@ -150,7 +148,6 @@ const LessonChat = ({ theme }) => {
           <ListItemAvatar><Avatar sx={{bgcolor: 'primary.light'}}>P</Avatar></ListItemAvatar>
           <ListItemText primary="Prof. Pádraig" secondary="No es obligatorio, pero sí muy recomendado." />
         </ListItem>
-        {/* <div ref={messagesEndRef} /> */} {/* Ya no es necesario para la maqueta */}
       </Box>
       <Divider />
       <Box sx={{ p: 2, bgcolor: 'background.default' }}>
@@ -171,13 +168,12 @@ const LessonChat = ({ theme }) => {
   );
 };
 
-// --- ¡¡¡COMPONENTE "MIS NOTAS" AHORA ES FUNCIONAL!!! ---
+// --- Componente "Mis Notas" (Sin cambios) ---
 const LessonNotes = ({ theme, lessonId }) => {
   const [notes, setNotes] = useState([]);
   const [newNote, setNewNote] = useState("");
   const [loadingNotes, setLoadingNotes] = useState(true);
 
-  // --- Cargar Notas ---
   useEffect(() => {
     if (!lessonId) return;
     const fetchNotes = async () => {
@@ -192,55 +188,48 @@ const LessonNotes = ({ theme, lessonId }) => {
       }
     };
     fetchNotes();
-  }, [lessonId]); // Se recarga si la lección cambia
+  }, [lessonId]);
 
-  // --- Añadir Nota ---
   const handleAddNote = async (e) => {
-    e.preventDefault(); // Previene que el formulario recargue la página
+    e.preventDefault(); 
     if (newNote.trim() === "") return;
     try {
       const response = await axiosInstance.post(`/api/lessons/${lessonId}/notes/`, {
         content: newNote,
         is_completed: false
       });
-      setNotes([...notes, response.data]); // Añade la nueva nota a la lista
-      setNewNote(""); // Limpia el input
+      setNotes([...notes, response.data]); 
+      setNewNote(""); 
     } catch (err) {
       console.error("Error al añadir nota:", err);
     }
   };
   
-  // --- Borrar Nota ---
   const handleDeleteNote = async (noteId) => {
     try {
       await axiosInstance.delete(`/api/lessons/${lessonId}/notes/${noteId}/`);
-      setNotes(notes.filter(note => note.id !== noteId)); // Quita la nota de la lista
+      setNotes(notes.filter(note => note.id !== noteId)); 
     } catch (err) {
       console.error("Error al borrar nota:", err);
     }
   };
 
-  // --- Marcar como Completada ---
   const handleToggleNote = async (note) => {
     try {
       const updatedNote = { ...note, is_completed: !note.is_completed };
       
-      // Actualiza en el backend (PATCH es mejor que PUT para 1 solo campo)
       await axiosInstance.patch(`/api/lessons/${lessonId}/notes/${note.id}/`, {
         is_completed: updatedNote.is_completed
       });
       
-      // Actualiza en el estado local
       setNotes(notes.map(n => (n.id === note.id ? updatedNote : n)));
     } catch (err) {
       console.error("Error al actualizar nota:", err);
     }
   };
 
-
   return (
     <Box sx={{height: '100%', display: 'flex', flexDirection: 'column'}}>
-      {/* Lista de Notas (Scrollable) */}
       <Box sx={{ flex: 1, overflowY: 'auto', p: 2, ...getScrollbarStyles(theme) }}>
         {loadingNotes ? (
           <CircularProgress sx={{ display: 'block', mx: 'auto', mt: 4 }} />
@@ -279,7 +268,6 @@ const LessonNotes = ({ theme, lessonId }) => {
         )}
       </Box>
       <Divider />
-      {/* Input de Nueva Nota */}
       <Box component="form" onSubmit={handleAddNote} sx={{ p: 2, bgcolor: 'background.default' }}>
         <TextField
           fullWidth
@@ -300,7 +288,7 @@ const LessonNotes = ({ theme, lessonId }) => {
   );
 };
 
-// --- Componente Maqueta (PanelProfesor) ---
+// --- Componente Maqueta (PanelProfesor) (Sin cambios) ---
 const ProfessorPanel = ({ theme }) => {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -344,6 +332,7 @@ const ProfessorPanel = ({ theme }) => {
 };
 
 
+// === COMPONENTE PRINCIPAL ===
 function LessonPage() {
   const { courseId, lessonId } = useParams(); 
   const navigate = useNavigate();
@@ -364,9 +353,14 @@ function LessonPage() {
   const [submission, setSubmission] = useState(null);
   const [submissionContent, setSubmissionContent] = useState("");
   const [fileToUpload, setFileToUpload] = useState(null);
-  const [loadingAssignment, setLoadingAssignment] = useState(false);
+  const [loadingAssignment, setLoadingAssignment] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(false); 
+
+  // --- Estados del Quiz ---
+  const [quiz, setQuiz] = useState(null);
+  const [quizAttempt, setQuizAttempt] = useState(null);
+  const [loadingQuiz, setLoadingQuiz] = useState(true); 
 
   // Estados de UI
   const [sideTabValue, setSideTabValue] = useState(0);
@@ -376,65 +370,110 @@ function LessonPage() {
   const [snackbarSeverity, setSnackbarSeverity] = useState("success");
 
 
-  // --- useEffect CONECTADO ---
+  // --- ¡¡¡useEffect REFACTORIZADO!!! ---
   useEffect(() => {
     const fetchLessonData = async () => {
       try {
         setLoading(true);
         setError(null);
+        // Resetea todos los estados de contenido
         setAssignment(null); 
         setSubmission(null); 
+        setQuiz(null);
+        setQuizAttempt(null);
         setFileToUpload(null); 
         setSubmissionContent(""); 
         setIsEditing(false); 
+        setLoadingAssignment(true); 
+        setLoadingQuiz(true);       
 
-        // 1. Cargar Lección y Completado
-        const [lessonResponse, completionsResponse] = await Promise.all([
-          axiosInstance.get(`/api/lessons/${lessonId}/`),
-          axiosInstance.get('/api/completions/my_completions/')
-        ]);
-        
+        // --- 1. CARGA CRÍTICA: LA LECCIÓN ---
+        // Si esto falla, SÍ queremos mostrar el error principal.
+        const lessonResponse = await axiosInstance.get(`/api/lessons/${lessonId}/`);
         setLesson(lessonResponse.data);
-        const numericLessonId = parseInt(lessonId, 10);
-        const completed = completionsResponse.data.some(comp => comp.lesson.id === numericLessonId);
-        setIsCompleted(completed);
-        
-        // 2. Cargar Tarea (Assignment)
-        try {
-          setLoadingAssignment(true);
-          const assignmentResponse = await axiosInstance.get(`/api/assignments/lesson/${lessonId}/`);
-          const loadedAssignment = assignmentResponse.data;
-          setAssignment(loadedAssignment);
 
-          // 3. Cargar Entregas (Submissions)
-          const submissionsResponse = await axiosInstance.get('/api/submissions/my_submissions/');
-          const existingSubmission = submissionsResponse.data.find(
-            sub => sub.assignment === loadedAssignment.id
-          );
-          
-          if (existingSubmission) {
-            setSubmission(existingSubmission);
-            setSubmissionContent(existingSubmission.content || "");
+        // --- 2. CARGAS SECUNDARIAS (en paralelo) ---
+        // Las ejecutamos y manejamos los errores individualmente
+        // para que una no detenga a la otra.
+
+        // Cargar Completado
+        (async () => {
+          try {
+            const completionsResponse = await axiosInstance.get('/api/completions/my_completions/');
+            const numericLessonId = parseInt(lessonId, 10);
+            const completed = completionsResponse.data.some(comp => comp.lesson.id === numericLessonId);
+            setIsCompleted(completed);
+          } catch (err) { 
+            console.error("Error al cargar estado de completado:", err); 
+            // Opcional: mostrar un snackbar de error
+            // setSnackbarMessage("No se pudo cargar tu progreso.");
+            // setSnackbarSeverity("error");
+            // setSnackbarOpen(true);
           }
-        } catch (assignmentErr) {
-          if (assignmentErr.response && assignmentErr.response.status === 404) {
-            console.log("Esta lección no tiene tarea.");
-          } else {
-            console.error("Error al cargar la tarea:", assignmentErr);
+        })();
+
+        // Cargar Tarea y Entrega
+        (async () => {
+          try {
+            const assignmentResponse = await axiosInstance.get(`/api/assignments/lesson/${lessonId}/`);
+            const loadedAssignment = assignmentResponse.data;
+            setAssignment(loadedAssignment);
+
+            // Solo buscamos entregas si encontramos una tarea
+            const submissionsResponse = await axiosInstance.get('/api/submissions/my_submissions/');
+            const existingSubmission = submissionsResponse.data.find(sub => sub.assignment === loadedAssignment.id);
+            if (existingSubmission) {
+              setSubmission(existingSubmission);
+              setSubmissionContent(existingSubmission.content || "");
+            }
+          } catch (err) {
+            if (err.response && err.response.status === 404) {
+              console.log("Esta lección no tiene tarea.");
+            } else {
+              console.error("Error al cargar la tarea:", err);
+            }
+          } finally {
+            setLoadingAssignment(false); // Termina el loading de la tarea
           }
-        } finally {
-          setLoadingAssignment(false);
-        }
+        })();
+
+        // Cargar Quiz e Intento (EL SOSPECHOSO)
+        (async () => {
+          try {
+            const quizResponse = await axiosInstance.get(`/api/quizzes/lesson/${lessonId}/`); // Endpoint de quiz
+            const loadedQuiz = quizResponse.data;
+            setQuiz(loadedQuiz);
+
+            // Solo buscamos intentos si encontramos un quiz
+            const attemptsResponse = await axiosInstance.get('/api/quiz_attempts/my_attempts/'); // Endpoint de intentos
+            const existingAttempt = attemptsResponse.data.find(att => att.quiz === loadedQuiz.id);
+            if (existingAttempt) {
+              setQuizAttempt(existingAttempt);
+            }
+          } catch (err) {
+            if (err.response && err.response.status === 404) {
+              console.log("Esta lección no tiene quiz (o la ruta de intentos 404).");
+            } else {
+              console.error("Error al cargar quiz o intentos:", err);
+              // AHORA ESTE ERROR YA NO ROMPE LA PÁGINA
+            }
+          } finally {
+            setLoadingQuiz(false); // Termina el loading del quiz
+          }
+        })();
 
       } catch (err) {
+        // Este CATCH ahora SÓLO se activa si la LECCIÓN principal falla
         console.error("Error al cargar la lección:", err);
         setError("Error al cargar el contenido de la lección.");
+        setLoadingAssignment(false);
+        setLoadingQuiz(false);
       } finally {
-        setLoading(false);
+        setLoading(false); // La carga principal (lección) terminó
       }
     };
     fetchLessonData();
-  }, [lessonId, courseId, navigate]);
+  }, [lessonId, courseId, navigate]); // Dependencias sin cambios
 
   // --- 'Marcar como Completada' CONECTADA ---
   const handleMarkAsComplete = async () => {
@@ -544,6 +583,59 @@ function LessonPage() {
     return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><Alert severity="error">{error}</Alert></Box>;
   }
   if (!lesson) return null;
+
+  // --- ¡NUEVO! Lógica para el Panel de Calificaciones ---
+  
+  // 1. Construir la lista de tareas pendientes
+  const pendingTasks = [];
+  if (assignment && !submission) {
+    pendingTasks.push({ 
+      id: `assignment-${assignment.id}`,
+      title: assignment.title,
+      due_date: assignment.due_date,
+      type: 'assignment'
+    });
+  }
+  if (quiz && !quizAttempt) {
+    pendingTasks.push({
+      id: `quiz-${quiz.id}`,
+      title: quiz.title,
+      due_date: quiz.due_date, // Asumiendo que el quiz tiene due_date
+      module_id: quiz.module, // Asumiendo que el quiz tiene module_id
+      type: 'quiz'
+    });
+  }
+
+  // 2. Helper para el estado de la tarea
+  const getTaskStatus = (dueDate) => {
+    if (!dueDate) {
+      return { label: 'Sin fecha límite', color: 'default', icon: <AccessTimeIcon fontSize="small" /> };
+    }
+    const now = new Date();
+    const due = new Date(dueDate);
+    if (due < now) {
+      return { label: 'Vencido', color: 'error', icon: <ErrorOutlineIcon fontSize="small" /> };
+    }
+    // 3 días de antelación
+    const threeDays = 1000 * 60 * 60 * 24 * 3;
+    if (due.getTime() - now.getTime() < threeDays) {
+      return { label: 'Vence pronto', color: 'warning', icon: <AccessTimeIcon fontSize="small" /> };
+    }
+    return { label: 'A tiempo', color: 'success', icon: <CheckCircleIcon fontSize="small" /> };
+  };
+
+  // 3. Helper para navegar a la tarea
+  const handleTaskClick = (task) => {
+    if (task.type === 'assignment') {
+      // Cambia a la pestaña "Tarea" en esta misma página
+      setMainTabValue(1);
+    }
+    if (task.type === 'quiz') {
+      // Navega a la página del quiz
+      navigate(`/courses/${courseId}/modules/${task.module_id}/quiz`);
+    }
+  };
+
 
   // --- RENDERIZADO PRINCIPAL ---
   return (
@@ -805,7 +897,7 @@ function LessonPage() {
                         </Paper>
                     </motion.div>
 
-                    {/* Widget de Pestañas (Maquetas) */}
+                    {/* Widget de Pestañas */}
                     <motion.div variants={itemVariants} style={{
                         flex: 1,      
                         minHeight: 0,
@@ -834,11 +926,9 @@ function LessonPage() {
                                     <LessonChat theme={theme} />
                                 </TabPanel>
                                 <TabPanel value={sideTabValue} index={1} theme={theme}>
-                                    {/* ¡¡¡AHORA ES FUNCIONAL!!! */}
                                     <LessonNotes theme={theme} lessonId={lesson.id} />
                                 </TabPanel>
                                 <TabPanel value={sideTabValue} index={2} theme={theme}>
-                                    {/* ¡RECURSOS AHORA ES REAL! */}
                                     <List sx={{p: 2}}>
                                     {lesson.resources && lesson.resources.length > 0 ? (
                                       lesson.resources.map(resource => (
@@ -856,17 +946,88 @@ function LessonPage() {
                                     )}
                                     </List>
                                 </TabPanel>
-                                <TabPanel value={sideTabValue} index={3} theme={theme}>
-                                    {/* (Maqueta de Calificaciones) */}
-                                    <List sx={{p: 2}} dense>
-                                    <ListItem disableGutters>
-                                        <ListItemIcon><AssignmentIcon fontSize="small" /></ListItemIcon>
-                                        <ListItemText primary="Tarea: Ensayo de Python" />
-                                        <Typography variant="body2" sx={{ fontWeight: 600 }}>18/20</Typography>
-                                    </ListItem>
+
+                            {/* === ¡¡¡AQUÍ ESTÁ EL REDISEÑO!!! === */}
+                            <TabPanel value={sideTabValue} index={3} theme={theme}>
+                              
+                              {/* ¡NUEVO! Contenedor Flex para empujar el botón hacia abajo */}
+                              <Box sx={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                // Esto hace que el contenedor ocupe al menos
+                                // toda la altura del panel, permitiendo que
+                                // el 'flexGrow' funcione.
+                                minHeight: '100%', 
+                              }}>
+
+                                {/* Contenido (Título, Loading, Lista) */}
+                                <Box sx={{ flexGrow: 1 }}> {/* ¡CLAVE! Esto empuja el resto hacia abajo */}
+                                  
+                                  {/* 1. Título */}
+                                  <Typography variant="h6" sx={{ fontWeight: 600, p: 2, pb: 1 }}>
+                                    Tareas Pendientes (Lección)
+                                  </Typography>
+                                  
+                                  {/* 2. Loading */}
+                                  {(loadingAssignment || loadingQuiz) && (
+                                    <CircularProgress sx={{ display: 'block', mx: 'auto', mt: 4 }} />
+                                  )}
+
+                                  {/* 3. Lista de Tareas */}
+                                  {!(loadingAssignment || loadingQuiz) && (
+                                    <List sx={{px: 1}} dense>
+                                      {pendingTasks.length > 0 ? (
+                                        pendingTasks.map(task => {
+                                          const status = getTaskStatus(task.due_date);
+                                          return (
+                                            <ListItemButton key={task.id} sx={{borderRadius: 2, mb: 1}} onClick={() => handleTaskClick(task)}>
+                                              <ListItemIcon sx={{minWidth: 40}}>
+                                                {task.type === 'assignment' ? <AssignmentIcon /> : <AssessmentIcon />}
+                                              </ListItemIcon>
+                                              <ListItemText 
+                                                primary={task.title}
+                                                secondary={
+                                                  <Chip 
+                                                    icon={status.icon} 
+                                                    label={status.label}
+                                                    color={status.color} 
+                                                    size="small" 
+                                                    variant="outlined"
+                                                    sx={{mt: 0.5}}
+                                                  />
+                                                }
+                                              />
+                                            </ListItemButton>
+                                          );
+                                        })
+                                      ) : (
+                                        // 4. Mensaje de "Todo listo"
+                                        <Typography sx={{p: 2, textAlign: 'center', color: 'text.secondary'}}>
+                                          ¡Estás al día! No tienes tareas ni exámenes pendientes para esta lección.
+                                        </Typography>
+                                      )}
                                     </List>
-                                </TabPanel>
-                            </Box>
+                                  )}
+                                </Box> {/* Fin del contenido flexible */}
+
+                                {/* Botón (Contenido Fijo en la parte inferior) */}
+                                <Box sx={{ flexShrink: 0 }}> {/* Evita que este Box se encoja */}
+                                  <Divider />
+                                  <Box sx={{p: 2, bgcolor: 'background.default'}}>
+                                    <Button 
+                                      variant="outlined" 
+                                      fullWidth
+                                      component={RouterLink}
+                                      to={`/courses/${courseId}/grades`}
+                                    >
+                                      Ver Libro de Calificaciones
+                                    </Button>
+                                  </Box>
+                                </Box>
+                                
+                              </Box> {/* Fin del Contenedor Flex */}
+                            </TabPanel>
+                          </Box>
                         </Paper>
                     </motion.div>
                     

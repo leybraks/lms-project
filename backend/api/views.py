@@ -13,7 +13,7 @@ from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 # Imports de Modelos y Serializers de tu app
 from .models import Course, Enrollment, Lesson, LessonCompletion, Assignment, Submission, Quiz, User,Conversation, Message,LessonNote
-from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer, AssignmentSerializer, SubmissionSerializer, QuizSerializer,ConversationListSerializer,MessageSerializer, MessageCreateSerializer, LessonNoteSerializer
+from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer, AssignmentSerializer, SubmissionSerializer, QuizSerializer,ConversationListSerializer,MessageSerializer, MessageCreateSerializer, LessonNoteSerializer, GradedItemSerializer
 # ====================================================================
 # 1. Vistas de Cursos
 # ====================================================================
@@ -618,3 +618,24 @@ class LessonNoteViewSet(viewsets.ModelViewSet):
         """
         lesson = get_object_or_404(Lesson, id=self.kwargs['lesson_id'])
         serializer.save(user=self.request.user, lesson=lesson)
+
+# ====================================================================
+# NUEVA VISTA: Libro de Calificaciones (por Curso)
+# ====================================================================
+class GradebookView(generics.ListAPIView):
+    """
+    Devuelve una lista de todos los "entregables" (Tareas, Quizzes)
+    de un curso, junto con las entregas y notas del usuario actual.
+    """
+    serializer_class = GradedItemSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Obtiene el 'courseId' de la URL
+        course_id = self.kwargs['course_id']
+        
+        # Devuelve todas las TAREAS que pertenecen a ese curso
+        # (En el futuro, aquí también uniríamos los Quizzes)
+        return Assignment.objects.filter(
+            lesson__module__course_id=course_id
+        ).order_by('due_date', 'lesson__order')

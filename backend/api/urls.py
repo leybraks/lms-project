@@ -25,6 +25,7 @@ from .views import (
     StartDirectMessageView, # <-- Esta la vamos a borrar
     GroupChatListView,
     LessonNoteViewSet,
+    GradebookView,
     get_dashboard_stats,
     get_me_view # Importamos esta también, ya que existe en views.py
 ) 
@@ -67,6 +68,7 @@ urlpatterns = [
     path('inbox/contacts/', ContactListView.as_view(), name='contact-list'),
     path('inbox/start_dm/', StartDirectMessageView.as_view(), name='start-direct-message'),
     path('courses/all/', ListaDeCursosView.as_view(), name='course-list-all'),
+    path('courses/<int:course_id>/grades/', GradebookView.as_view(), name='gradebook-list'),
     path('', include(router.urls)),
 ]
 if settings.DEBUG:

@@ -10,6 +10,7 @@ import PrivateRoute from './components/PrivateRoute';
 import MainLayout from './components/MainLayout'; 
 import InboxPage from './pages/InboxPage';
 import CourseCatalogPage from './pages/CourseCatalogPage';
+import GradebookPage from './pages/GradebookPage';
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
               <Route path="/courses/:courseId/lessons/:lessonId" element={<LessonPage />} /> 
               <Route path="/inbox" element={<InboxPage />} />
               <Route path="/courses" element={<CourseCatalogPage />} />
+              <Route path="/courses/:courseId/grades" element={<GradebookPage />} />
               {/* 2. ¡AÑADE LA NUEVA RUTA DEL EXAMEN! */}
               <Route 
                 path="/courses/:courseId/modules/:moduleId/quiz" 

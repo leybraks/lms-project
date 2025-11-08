@@ -21,7 +21,8 @@ from .models import (
     Requirement,
     CourseBenefit,
     Conversation,
-    Message
+    Message,
+    Grade
 )
 
 # ====================================================================
@@ -66,6 +67,23 @@ class ConversationAdmin(admin.ModelAdmin):
     # Esto da una UI mucho mejor para añadir participantes
     filter_horizontal = ('participants',) 
     inlines = [MessageInline]
+
+class GradeInline(admin.TabularInline):
+    model = Grade
+    extra = 0 # No mostrar campos extra
+    # Hacemos que el profesor solo pueda poner nota y comentarios
+    fields = ('score', 'comments')
+class SubmissionAdmin(admin.ModelAdmin):
+    list_display = ('assignment', 'user', 'status', 'submitted_at')
+    list_filter = ('status', 'assignment__lesson__module__course')
+    search_fields = ('user__username', 'assignment__title')
+    
+    # ¡AQUI ESTÁ LA MAGIA!
+    # Añade el inline de 'Grade' a la página de Submission
+    inlines = [GradeInline]
+    
+    # Hacemos que los campos de la entrega sean de solo lectura para el admin
+    readonly_fields = ('assignment', 'user', 'content', 'file_submission', 'submitted_at')
 # ====================================================================
 # 3. Registro de Modelos
 # ====================================================================
@@ -103,3 +121,5 @@ admin.site.register(CourseBenefit)
 
 admin.site.register(Conversation, ConversationAdmin)
 admin.site.register(Message)
+admin.site.unregister(Submission) # <-- Des-registra la versión simple
+admin.site.register(Submission, SubmissionAdmin)
