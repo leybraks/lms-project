@@ -2,24 +2,24 @@
 import os
 from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
-from channels.auth import AuthMiddlewareStack
 
-# 1. Pon esta línea PRIMERO.
-# Le dice a Django dónde encontrar tu settings.py
+# 1. Poner esto PRIMERO
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
 
-# 2. Llama a get_asgi_application() INMEDIATAMENTE DESPUÉS.
-# Esta es la función que ejecuta django.setup() y carga tus settings.
+# 2. Inicializar Django
 django_asgi_app = get_asgi_application()
 
-# 3. ¡AHORA es seguro importar tus módulos!
-# Mueve esta importación de la parte de arriba para acá.
+# 3. IMPORTAR DESPUÉS de inicializar Django
 import api.routing 
+from api.middleware import TokenAuthMiddlewareStack # <-- ¡IMPORTA EL NUEVO!
 
-# 4. El resto de tu configuración (sin cambios)
+# 4. Configurar el router
 application = ProtocolTypeRouter({
     "http": django_asgi_app,
-    "websocket": AuthMiddlewareStack(
+    
+    # --- ¡CAMBIO AQUÍ! ---
+    # Reemplaza AuthMiddlewareStack por tu TokenAuthMiddlewareStack
+    "websocket": TokenAuthMiddlewareStack(
         URLRouter(
             api.routing.websocket_urlpatterns
         )

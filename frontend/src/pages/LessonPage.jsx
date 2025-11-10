@@ -3,6 +3,8 @@ import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import axiosInstance from '../api/axios';
 import { useTheme } from '@mui/material/styles';
 import { motion } from "framer-motion";
+import PetsIcon from '@mui/icons-material/Pets';
+import { JitsiMeeting } from '@jitsi/react-sdk';
 import { 
   Box, 
   Typography, 
@@ -27,12 +29,12 @@ import {
   ListItemButton,
   ListItemIcon,
   Chip,
-  CardMedia, // <-- Importado
-  Select, // <-- Importado
-  MenuItem, // <-- Importado
-  FormControl, // <-- Importado
-  InputLabel, // <-- Importado
-  
+  CardMedia, 
+  Select, 
+  MenuItem, 
+  FormControl, 
+  InputLabel,
+  LinearProgress // <-- ¡Importado para la Mascota!
 } from '@mui/material';
 
 // --- Iconos ---
@@ -57,15 +59,16 @@ import EditIcon from '@mui/icons-material/Edit';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy'; // <-- ¡NUEVO!
-import DownloadIcon from '@mui/icons-material/Download'; // <-- ¡NUEVO!
-import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn'; // <-- ¡AQUÍ ES DONDE VA!
+import ContentCopyIcon from '@mui/icons-material/ContentCopy'; 
+import DownloadIcon from '@mui/icons-material/Download'; 
 import CodeIcon from '@mui/icons-material/Code';
+import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
+
 // --- WebSocket y CodeShare ---
-import useWebSocket from 'react-use-websocket'; // <-- ¡NUEVO!
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'; // <-- ¡NUEVO!
-import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism'; // <-- ¡NUEVO!
-import { useAuth } from '../context/AuthContext'; // <-- ¡NUEVO!
+import useWebSocket from 'react-use-websocket'; 
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'; 
+import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism'; 
+import { useAuth } from '../context/AuthContext'; 
 
 // === VARIANTES DE ANIMACIÓN ===
 const containerVariants = {
@@ -146,6 +149,16 @@ function TabPanel(props) {
   );
 }
 
+// --- Helper para formatear tamaño de archivo ---
+function formatBytes(bytes, decimals = 2) {
+  if (!+bytes) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+}
+
 // --- Componentes de Mensaje (para el Chat) ---
 const CodeShareBlock = ({ sender, code, language, time, isStartOfGroup, user, onCopy }) => {
   const isMe = sender.username === user.username; 
@@ -197,33 +210,39 @@ const TextBlock = ({ sender, text, time, isStartOfGroup, user }) => {
   );
 };
 
-// --- ¡¡¡COMPONENTE "CHAT DE LECCIÓN" AHORA ES FUNCIONAL!!! ---
+// --- Componente "Chat de Lección" (Funcional) ---
 const LessonChat = ({ theme, lessonId, conversationId, onNotify }) => {
-  const { user } = useAuth();
+  const { user, authTokens } = useAuth(); 
   const messagesEndRef = useRef(null);
+  const chatContainerRef = useRef(null); // <-- Ref para el contenedor de scroll
   
   const [chatHistory, setChatHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
-  const [tabValue, setTabValue] = useState(0); // 0=Text, 1=Code
+  const [tabValue, setTabValue] = useState(0); 
   const [textContent, setTextContent] = useState("");
   const [codeContent, setCodeContent] = useState("");
   const [codeLang, setCodeLang] = useState("python");
   const [isSending, setIsSending] = useState(false);
 
-  // 1. URL del WebSocket
-  const socketUrl = `ws://127.0.0.1:8000/ws/chat/lesson/${lessonId}/`;
+  const socketUrl = `ws://127.0.0.1:8000/ws/chat/lesson/${lessonId}/?token=${authTokens?.access}`;
 
-  // 2. Conexión WebSocket
-  const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(socketUrl, {
-    onOpen: () => console.log('WebSocket conectado para Lección', lessonId),
-    onClose: () => console.log('WebSocket desconectado'),
-    shouldReconnect: (closeEvent) => true, // Reconexión automática
-  });
+  const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(
+    socketUrl, 
+    {
+      onOpen: () => console.log('WebSocket conectado para Lección', lessonId),
+      onClose: (e) => console.log('WebSocket desconectado:', e.reason),
+      onError: (e) => console.error('WebSocket error:', e),
+      shouldReconnect: (closeEvent) => true, 
+    },
+    !!(authTokens && lessonId) // Solo se conecta si hay token Y lessonId
+  );
 
-  // 3. Cargar Historial de Chat (vía HTTP)
+  // Cargar Historial
   useEffect(() => {
-    if (!conversationId) return; 
-    
+    if (!conversationId) {
+      setLoadingHistory(false);
+      return; 
+    }
     const fetchHistory = async () => {
       try {
         setLoadingHistory(true);
@@ -238,20 +257,22 @@ const LessonChat = ({ theme, lessonId, conversationId, onNotify }) => {
     fetchHistory();
   }, [conversationId]);
 
-  // 4. Recibir Mensajes (desde WebSocket)
+  // Recibir Mensajes
   useEffect(() => {
     if (lastJsonMessage !== null) {
-      // 'lastJsonMessage.message' es la estructura que definimos en el Consumer
       setChatHistory(prev => [...prev, lastJsonMessage.message]);
     }
   }, [lastJsonMessage]);
 
-  // 5. Scroll al fondo
+  // Scroll al fondo (Corregido)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatHistory]);
+    if (chatContainerRef.current) {
+      const scrollElement = chatContainerRef.current;
+      scrollElement.scrollTop = scrollElement.scrollHeight;
+    }
+  }, [chatHistory]); // Se activa cada vez que 'chatHistory' cambia
 
-  // 6. Enviar Mensaje (vía WebSocket)
+  // Enviar Mensaje
   const handleChatSubmit = (e) => {
     e.preventDefault();
     setIsSending(true);
@@ -262,13 +283,11 @@ const LessonChat = ({ theme, lessonId, conversationId, onNotify }) => {
       setIsSending(false);
       return;
     }
-
     sendJsonMessage({
       message_type: isCode ? 'CODE' : 'TEXT',
       content: content,
       language: isCode ? codeLang : null
     });
-
     if (isCode) setCodeContent("");
     else setTextContent("");
     setIsSending(false);
@@ -276,8 +295,16 @@ const LessonChat = ({ theme, lessonId, conversationId, onNotify }) => {
 
   return (
     <Box sx={{height: '100%', display: 'flex', flexDirection: 'column'}}>
-      {/* Lista de Mensajes (Scrollable) */}
-      <Box sx={{ flex: 1, overflowY: 'auto', p: 2, ...getScrollbarStyles(theme) }}>
+      <Box
+        ref={chatContainerRef} // <-- Añadido el Ref
+        sx={{ 
+          flex: 1, 
+          overflowY: 'auto', 
+          p: 2, 
+          ...getScrollbarStyles(theme),
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
         {loadingHistory ? (
           <CircularProgress sx={{ display: 'block', mx: 'auto', mt: 4 }} />
         ) : (
@@ -299,14 +326,11 @@ const LessonChat = ({ theme, lessonId, conversationId, onNotify }) => {
         <div ref={messagesEndRef} />
       </Box>
       <Divider />
-      {/* Input de Mensaje */}
       <Box component="form" onSubmit={handleChatSubmit} sx={{ p: 0, bgcolor: 'background.default' }}>
         <Tabs value={tabValue} onChange={(e, val) => setTabValue(val)} variant="fullWidth" sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tab icon={<ChatIcon />} iconPosition="start" label="Mensaje" sx={{minHeight: 48}} />
           <Tab icon={<CodeIcon />} iconPosition="start" label="CodeShare" sx={{minHeight: 48}} />
         </Tabs>
-        
-        {/* Panel de Texto */}
         <Box sx={{ p: 2, display: tabValue === 0 ? 'block' : 'none' }}>
           <TextField
             fullWidth
@@ -324,7 +348,6 @@ const LessonChat = ({ theme, lessonId, conversationId, onNotify }) => {
             }}
           />
         </Box>
-        {/* Panel de Código */}
         <Box sx={{ p: 2, display: tabValue === 1 ? 'block' : 'none' }}>
           <FormControl fullWidth size="small" sx={{ mb: 1.5 }} disabled={readyState !== 1 || isSending}>
             <InputLabel>Lenguaje</InputLabel>
@@ -362,7 +385,7 @@ const LessonChat = ({ theme, lessonId, conversationId, onNotify }) => {
 
 // --- Componente "Mis Notas" (Funcional) ---
 const LessonNotes = ({ theme, lessonId }) => {
-  const [notes, setNotes] = useState([]);
+  const [notes, setNotes] =useState([]);
   const [newNote, setNewNote] = useState("");
   const [loadingNotes, setLoadingNotes] = useState(true);
 
@@ -515,7 +538,7 @@ function LessonPage() {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [snackbarSeverity, setSnackbarSeverity] = useState("success");
-
+  const { user } = useAuth();
 
   // --- useEffect CONECTADO ---
   useEffect(() => {
@@ -533,13 +556,9 @@ function LessonPage() {
         setLoadingAssignment(true); 
         setLoadingQuiz(true);       
 
-        // --- 1. CARGA CRÍTICA: LA LECCIÓN ---
         const lessonResponse = await axiosInstance.get(`/api/lessons/${lessonId}/`);
         setLesson(lessonResponse.data);
 
-        // --- 2. CARGAS SECUNDARIAS (en paralelo) ---
-        
-        // Cargar Completado
         (async () => {
           try {
             const completionsResponse = await axiosInstance.get('/api/completions/my_completions/');
@@ -551,7 +570,6 @@ function LessonPage() {
           }
         })();
 
-        // Cargar Tarea y Entrega
         (async () => {
           try {
             const assignmentResponse = await axiosInstance.get(`/api/assignments/lesson/${lessonId}/`);
@@ -575,10 +593,8 @@ function LessonPage() {
           }
         })();
 
-        // Cargar Quiz e Intento (Simulado)
         (async () => {
           try {
-            // (Simula un quiz en la lección 2)
             if (lessonId === "2") { 
               setQuiz({ id: 101, title: "Quiz: Variables y Tipos", module_id: 1});
             }
@@ -787,22 +803,60 @@ function LessonPage() {
             flexDirection: 'column',
             gap: 3
         }}>
-          {/* 1. Video o Clase en Vivo */}
+          {/* 1. Video o Clase en Vivo (¡AHORA FUNCIONAL!) */}
           <motion.div variants={itemVariants}>
-            <Paper sx={{...glassPaperStyle(theme), p: 1 }}>
+            <Paper sx={{...glassPaperStyle(theme), p: 1, overflow: 'hidden' }}>
+              
+              {/* --- Lógica de Renderizado --- */}
               {lesson.live_session_room ? (
-                  <Box sx={{ height: '70vh', minHeight: 500, borderRadius: 3, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default' }}>
-                    <Box textAlign="center">
-                      <LiveTvIcon sx={{ fontSize: 80, color: 'primary.main' }} />
-                      <Typography variant="h5">Clase en Vivo</Typography>
-                      <Typography color="text.secondary">"{lesson.live_session_room}"</Typography>
-                      <Button variant="contained" sx={{mt: 2}}>Unirse a la Sesión</Button>
-                    </Box>
+                  
+                  // --- VISTA DE CLASE EN VIVO (JITSI) ---
+                  <Box sx={{ height: '70vh', minHeight: 500, borderRadius: 3, overflow: 'hidden', bgcolor: 'background.default' }}>
+                    <JitsiMeeting
+                        roomName={lesson.live_session_room} // <-- El nombre de la sala desde la API
+                        
+                        // Pasa el nombre de usuario de tu AuthContext
+                        userInfo={{
+                            displayName: user.username 
+                        }}
+                        
+                        // Configuración para una buena UX
+                        configOverwrite={{
+                            prejoinPageEnabled: true, // Pide al usuario su nombre y cámara/mic
+                            startWithAudioMuted: true,
+                            startWithVideoMuted: true,
+                            // Opcional: Si Jitsi ofrece grabación, configúralo aquí
+                            // fileRecordingsEnabled: true, 
+                            // remoteVideoMenu: {
+                            //   disableKick: true,
+                            // },
+                        }}
+                        
+                        // Configuración de la interfaz de Jitsi
+                        interfaceConfigOverwrite={{
+                            SHOW_JITSI_WATERMARK: false,
+                            SHOW_WATERMARK_FOR_GUESTS: false,
+                            TOOLBAR_BUTTONS: [
+                                'microphone', 'camera', 'chat', 'raisehand', 
+                                'desktop', 'fullscreen', 'tileview', 'profile', 'hangup',
+                                // 'recording' // Descomenta si tu servidor Jitsi lo permite
+                            ],
+                        }}
+                        
+                        // Asegura que el iframe ocupe todo el espacio
+                        getIFrameRef={(iframeRef) => { 
+                            iframeRef.style.height = '100%'; 
+                            iframeRef.style.width = '100%'; 
+                        }}
+                    />
                   </Box>
+                  
               ) : (
+                
+                // --- VISTA DE VIDEO PREGRABADO (Normal) ---
                 <Box sx={{ mt: 1, borderRadius: 2, overflow: 'hidden', position: 'relative', paddingBottom: '56.25%', height: 0, bgcolor: 'background.default' }}>
                   <iframe
-                    src={lesson.video_url}
+                    src={lesson.video_url} // <-- El video de YouTube/Vimeo
                     title={lesson.title}
                     frameBorder="0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -810,6 +864,7 @@ function LessonPage() {
                     style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
                   />
                 </Box>
+                
               )}
             </Paper>
           </motion.div>
@@ -1018,6 +1073,7 @@ function LessonPage() {
                                     <Tooltip title="Mis Notas"><Tab icon={<NotesIcon />} aria-label="Notas" sx={{minWidth: 'auto'}} /></Tooltip>
                                     <Tooltip title="Recursos"><Tab icon={<CloudDownloadIcon />} aria-label="Recursos" sx={{minWidth: 'auto'}} /></Tooltip>
                                     <Tooltip title="Entregables"><Tab icon={<AssignmentTurnedInIcon />} aria-label="Entregables" sx={{minWidth: 'auto'}} /></Tooltip>
+                                    <Tooltip title="Mascota"><Tab icon={<PetsIcon />} aria-label="Mascota" sx={{minWidth: 'auto'}} /></Tooltip>
                                 </Tabs>
                             </Box>
 
@@ -1031,9 +1087,10 @@ function LessonPage() {
                                     <LessonChat 
                                       theme={theme} 
                                       lessonId={lesson.id}
-                                      conversationId={lesson.chat_conversation} // <-- Pasa el ID del chat
-                                      onNotify={(msg) => { // <-- Pasa el handler del snackbar
+                                      conversationId={lesson.chat_conversation} 
+                                      onNotify={(msg) => { 
                                         setSnackbarMessage(msg);
+                                        setSnackbarSeverity("success");
                                         setSnackbarOpen(true);
                                       }}
                                     />
@@ -1120,6 +1177,47 @@ function LessonPage() {
                                         </Box>
                                       </Box>
                                     </Box>
+                                </TabPanel>
+                                <TabPanel value={sideTabValue} index={4} theme={theme}>
+                                  <Box sx={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    p: 3,
+                                    gap: 2
+                                  }}>
+                                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                                      Tu Mascota
+                                    </Typography>
+                                    
+                                    {/* Avatar de la Mascota (Maqueta) */}
+                                    <Avatar sx={{ width: 120, height: 120, fontSize: '4rem', bgcolor: 'grey.700' }}>
+                                      🥚
+                                    </Avatar>
+                                    
+                                    {/* Barra de XP (Maqueta) */}
+                                    <Box sx={{ width: '100%' }}>
+                                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                        <Typography variant="body2" sx={{ fontWeight: 600 }}>Nivel 1</Typography>
+                                        <Typography variant="body2" color="text.secondary">15 / 100 XP</Typography>
+                                      </Box>
+                                      <LinearProgress 
+                                        variant="determinate" 
+                                        value={15} 
+                                        sx={{ height: 10, borderRadius: 5 }} 
+                                      />
+                                    </Box>
+
+                                    {/* Botón de Acceso (Maqueta) */}
+                                    <Button 
+                                      variant="contained" 
+                                      fullWidth 
+                                      sx={{mt: 2}}
+                                      // onClick={() => navigate('/pet-inventory')} // (Para el futuro)
+                                    >
+                                      Ver y Editar Mascota
+                                    </Button>
+                                  </Box>
                                 </TabPanel>
                             </Box>
                         </Paper>

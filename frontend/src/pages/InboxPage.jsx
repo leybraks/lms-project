@@ -3,6 +3,7 @@ import { useTheme } from '@mui/material/styles';
 import { motion } from "framer-motion";
 import axiosInstance from '../api/axios'; 
 import { useAuth } from '../context/AuthContext';
+import useWebSocket from 'react-use-websocket';
 import { 
   Box, 
   Typography, 
@@ -115,7 +116,7 @@ function formatBytes(bytes, decimals = 2) {
 
 function InboxPage() {
   const theme = useTheme();
-  const { user } = useAuth();
+  const { user , authTokens} = useAuth();
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   
@@ -139,44 +140,88 @@ function InboxPage() {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [fileToUpload, setFileToUpload] = useState(null);
+  const [dmChats, setDmChats] = useState([]);
+  const socketUrl = selectedConvo
+    ? `ws://127.0.0.1:8000/ws/chat/conversation/${selectedConvo.id}/?token=${authTokens?.access}`
+    : null; // No conectarse si no hay chat seleccionado
 
-  
+  // 2. Conecta el WebSocket
+  const { lastJsonMessage, readyState } = useWebSocket(
+    socketUrl,
+    {
+      onOpen: () => console.log('WebSocket (Inbox) conectado'),
+      onClose: (e) => console.log('WebSocket (Inbox) desconectado:', e.reason),
+      onError: (e) => console.error('WebSocket (Inbox) error:', e),
+      shouldReconnect: (closeEvent) => true,
+    },
+    !!selectedConvo // Solo se conecta si 'selectedConvo' no es null
+  );  
   // --- useEffects (Sin cambios) ---
   useEffect(() => {
     const fetchSidebarData = async () => {
       try {
         setLoadingSidebar(true);
         setError(null);
-        const [groupsResponse, contactsResponse] = await Promise.all([
+        
+        // 1. Cargar las 3 listas (esto ya está bien)
+        const [groupsResponse, dmsResponse, contactsResponse] = await Promise.all([
           axiosInstance.get('/api/inbox/group_chats/'),
+          axiosInstance.get('/api/inbox/dm_chats/'),
           axiosInstance.get('/api/inbox/contacts/')
         ]);
         
         const groups = groupsResponse.data;
+        const dms = dmsResponse.data; 
         const contacts = contactsResponse.data;
 
         setGroupChats(groups);
+        setDmChats(dms);
         setContacts(contacts);
+        
+        // --- ¡INICIO DE LA LÓGICA DE VALIDACIÓN! ---
         
         const lastConvoString = localStorage.getItem('lastSelectedConvo');
         let convoToSet = null;
+        let validConvoFound = false;
 
         if (lastConvoString) {
           try {
-            convoToSet = JSON.parse(lastConvoString);
+            const lastConvo = JSON.parse(lastConvoString);
+            
+            // 2. Combinar todas las conversaciones válidas de este usuario
+            const allUserConvos = [...groups, ...dms];
+
+            // 3. Comprobar si la convo de localStorage está en la lista del usuario
+            if (allUserConvos.some(convo => convo.id === lastConvo.id)) {
+                // ¡Es válida! Usarla.
+                convoToSet = lastConvo; 
+                validConvoFound = true;
+            } else {
+                // El convo de localStorage es de OTRO usuario. Ignorarlo y borrarlo.
+                localStorage.removeItem('lastSelectedConvo');
+            }
+
           } catch (e) {
             console.error("Error al parsear la conversación guardada:", e);
             localStorage.removeItem('lastSelectedConvo');
           }
         }
         
-        if (!convoToSet && groups.length > 0) {
-          convoToSet = groups[0];
+        // 4. Lógica de fallback (si no se encontró una convo válida)
+        if (!validConvoFound) {
+            if (groups.length > 0) {
+                convoToSet = groups[0]; // Usar el primer chat de grupo
+            } else if (dms.length > 0) {
+                convoToSet = dms[0]; // O usar el primer DM
+            }
         }
 
+        // 5. Establecer la conversación seleccionada (solo si hay una)
         if (convoToSet) {
-          setSelectedConvo(convoToSet);
+            setSelectedConvo(convoToSet);
         }
+        
+        // --- FIN DE LA LÓGICA DE VALIDACIÓN ---
         
       } catch (err) { 
         console.error("Error al cargar datos del sidebar:", err);
@@ -184,36 +229,53 @@ function InboxPage() {
       } 
       finally { setLoadingSidebar(false); }
     };
+    
     fetchSidebarData();
-  }, []); 
+  }, []);
 
   useEffect(() => {
-    if (!selectedConvo) return;
-    const fetchMessages = async () => {
-      try {
-        setLoadingMessages(true);
-        setError(null);
-        const response = await axiosInstance.get(`/api/inbox/conversations/${selectedConvo.id}/messages/`);
-        setMessages(response.data);
-      } catch (err) { 
-        console.error("Error al cargar mensajes:", err);
-        setError("No se pudieron cargar los mensajes.");
-      } 
-      finally { setLoadingMessages(false); }
-    };
-    fetchMessages();
-  }, [selectedConvo]);
+    if (lastJsonMessage !== null) {
+      
+      const newMessage = lastJsonMessage.message; 
+      if (!newMessage) return; // Salir si el mensaje está malformado
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-  }, [messages]);
+      // === PASO 1: Actualizar la ventana de chat (con anti-duplicados) ===
+      setMessages(prevMessages => {
+        const msgExists = prevMessages.some(msg => msg.id === newMessage.id);
+        if (msgExists) {
+          return prevMessages; // No hacer nada si ya existe
+        }
+        return [...prevMessages, newMessage];
+      });
 
-  useEffect(() => {
-    if (selectedConvo) {
-      localStorage.setItem('lastSelectedConvo', JSON.stringify(selectedConvo));
+      // === PASO 2: Actualizar el "último mensaje" del sidebar ===
+      
+      // Obtenemos la ID de la conversación del mensaje
+      const convoId = newMessage.conversation; 
+      
+      // Creamos un "snippet" del último mensaje
+      let snippet = newMessage.content;
+      if (!snippet) {
+        if (newMessage.message_type === 'CODE') snippet = 'Código compartido';
+        else if (newMessage.message_type === 'IMAGE') snippet = 'Imagen';
+        else if (newMessage.message_type === 'FILE') snippet = newMessage.file_name || 'Archivo';
+      }
+
+      // Actualizar la lista de GRUPOS
+      setGroupChats(prev => prev.map(chat => 
+        chat.id === convoId 
+          ? { ...chat, last_message_snippet: snippet } // Actualiza el snippet
+          : chat
+      ));
+      
+      // Actualizar la lista de DMs
+      setDmChats(prev => prev.map(chat => 
+        chat.id === convoId 
+          ? { ...chat, last_message_snippet: snippet } // Actualiza el snippet
+          : chat
+      ));
     }
-  }, [selectedConvo]);
-
+  }, [lastJsonMessage]);
   // --- Handlers (Sin cambios) ---
   const handleTabChange = (event, newValue) => setTabValue(newValue);
 
@@ -246,7 +308,7 @@ function InboxPage() {
         formData,
         { headers: { 'Content-Type': 'multipart/form-data' } }
       );
-      setMessages(prevMessages => [...prevMessages, response.data]);
+
       setTextContent("");
       setCodeContent("");
       setFileToUpload(null);
@@ -617,22 +679,40 @@ function InboxPage() {
                 <Divider sx={{ mx: 2 }} />
 
                 {/* --- SECCIÓN DE MENSAJES DIRECTOS (Contactos) --- */}
-                <List sx={{ p: 1 }} subheader={<ListSubheader sx={{ bgcolor: 'transparent', fontWeight: 600, color: 'text.secondary', lineHeight: '30px' }}>MENSAJES DIRECTOS (Contactos)</ListSubheader>}>
-                  {contacts.map(contact => (
-                    <ListItemButton 
-                      key={contact.id} 
-                      selected={selectedConvo?.is_group === false && selectedConvo?.participants.some(p => p.id === contact.id)}
-                      onClick={() => handleStartConversation(contact.id)}
-                      sx={{ borderRadius: 2, mb: 0.5 }}
-                    >
-                      <ListItemAvatar><Avatar sx={{ bgcolor: 'primary.light' }}>{contact.username[0]}</Avatar></ListItemAvatar>
-                      <ListItemText 
-                        primary={contact.username}
-                        secondary={contact.role === 'PROFESSOR' ? 'Profesor' : 'Compañero'}
-                        primaryTypographyProps={{ fontWeight: 600 }}
-                      />
-                    </ListItemButton>
-                  ))}
+                {/* --- ¡SECCIÓN DE MENSAJES DIRECTOS (ACTUALIZADA)! --- */}
+                <List sx={{ p: 1 }} subheader={<ListSubheader sx={{ bgcolor: 'transparent', fontWeight: 600, color: 'text.secondary', lineHeight: '30px' }}>MENSAJES DIRECTOS</ListSubheader>}>
+                  
+                  {/* ¡CAMBIO! Mapeamos 'dmChats' en lugar de 'contacts' */}
+                  {dmChats.map(convo => {
+                    
+                    // Como es un DM, buscamos al *otro* participante
+                    const otherParticipant = convo.participants.find(p => p.username !== user.username);
+                    
+                    // Si no hay otro (ej. un DM contigo mismo), no lo muestres
+                    if (!otherParticipant) return null; 
+
+                    return (
+                      <ListItemButton 
+                        key={convo.id} 
+                        // ¡CAMBIO! La lógica de 'selected' ahora es simple
+                        selected={selectedConvo?.id === convo.id}
+                        onClick={() => setSelectedConvo(convo)} // <-- ¡CAMBIO!
+                        sx={{ borderRadius: 2, mb: 0.5 }}
+                      >
+                        <ListItemAvatar>
+                          <Avatar sx={{ bgcolor: 'primary.light' }}>
+                            {otherParticipant.username[0]}
+                          </Avatar>
+                        </ListItemAvatar>
+                        <ListItemText 
+                          primary={otherParticipant.username} // <-- El nombre del otro
+                          secondary={convo.last_message_snippet || (otherParticipant.role === 'PROFESSOR' ? 'Profesor' : 'Compañero')} // <-- Muestra el último mensaje
+                          primaryTypographyProps={{ fontWeight: 600 }}
+                          secondaryTypographyProps={{ noWrap: true, opacity: 0.8 }}
+                        />
+                      </ListItemButton>
+                    );
+                  })}
                 </List>
               </>
             )}

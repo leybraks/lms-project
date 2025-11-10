@@ -11,6 +11,8 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Max, Count
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 # Imports de Modelos y Serializers de tu app
 from .models import Course, Enrollment, Lesson, LessonCompletion, Assignment, Submission, Quiz, User,Conversation, Message,LessonNote
 from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer, AssignmentSerializer, SubmissionSerializer, QuizSerializer,ConversationListSerializer,MessageSerializer, MessageCreateSerializer, LessonNoteSerializer, GradedItemSerializer
@@ -436,7 +438,7 @@ class GroupChatListView(generics.ListAPIView):
 class MessageListView(generics.ListCreateAPIView):
     """
     GET: Devuelve todos los mensajes de una conversación específica.
-    POST: Crea un nuevo mensaje en esa conversación.
+    POST: Crea un nuevo mensaje Y LO RETRANSMITE POR WEBSOCKET.
     """
     permission_classes = [IsAuthenticated]
 
@@ -444,63 +446,71 @@ class MessageListView(generics.ListCreateAPIView):
         """ Helper para obtener y validar la conversación """
         conversation_id = self.kwargs['conversation_id']
         conversation = get_object_or_404(Conversation, id=conversation_id)
-        
+
         # Comprueba que el usuario sea participante
         if not self.request.user in conversation.participants.all():
             raise PermissionDenied("No tienes permiso para ver esta conversación.")
         return conversation
 
     def get_serializer_class(self):
-        # Usa un serializer diferente para GET (leer) vs POST (crear)
         if self.request.method == 'POST':
             return MessageCreateSerializer
-        return MessageSerializer # <-- Este es el serializer "completo"
+        return MessageSerializer
 
     def get_queryset(self):
-        # Obtiene la conversación (ya incluye la validación de permisos)
         conversation = self.get_conversation()
-        # Devuelve los mensajes de esa conversación
         return conversation.messages.all().order_by('timestamp')
 
     def perform_create(self, serializer):
         conversation = self.get_conversation()
-        
-        # --- ¡LÓGICA ACTUALIZADA! ---
         file_name = None
         file_size = None
 
-        # Revisa si hay un archivo en la petición
         if 'file_upload' in self.request.FILES:
             file = self.request.FILES['file_upload']
             file_name = file.name
             file_size = file.size
-        
-        # Guarda todo junto
+
         serializer.save(
             sender=self.request.user, 
             conversation=conversation,
             file_name=file_name,
             file_size=file_size
         )
-    # --- ¡¡¡AQUÍ ESTÁ LA CORRECCIÓN!!! ---
-    # Sobrescribimos el método 'create' para cambiar lo que devuelve
+
     def create(self, request, *args, **kwargs):
         # 1. Usar el serializer de CREACIÓN para validar la data de entrada
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
+
         # 2. Guardar el objeto (perform_create se llamará automáticamente)
         self.perform_create(serializer)
-        
-        # 3. ¡LA CLAVE!
-        # En lugar de devolver serializer.data (que es el de creación),
-        # creamos un nuevo serializer (el COMPLETO, 'MessageSerializer')
-        # con la instancia que acabamos de crear (serializer.instance)
-        # y devolvemos SUS datos.
-        
-        # Usamos MessageSerializer (el de GET) para la respuesta
+
+        # 3. Usar el serializer de LECTURA (completo) para la respuesta
         read_serializer = MessageSerializer(serializer.instance, context=self.get_serializer_context())
-        
+
+        # --- ¡INICIO DE CÓDIGO NUEVO PARA WEBSOCKET! ---
+        try:
+            # 4. Obtener el Channel Layer
+            channel_layer = get_channel_layer()
+
+            # 5. Definir el nombre del grupo (debe coincidir con el Consumer)
+            room_group_name = f'chat_conversation_{serializer.instance.conversation.id}'
+
+            # 6. Enviar el mensaje al grupo
+            async_to_sync(channel_layer.group_send)(
+                room_group_name,
+                {
+                    'type': 'chat_message', # Llama al método 'chat_message'
+                    'message': read_serializer.data # ¡Enviamos el mensaje serializado!
+                }
+            )
+            print(f"[Views] Mensaje {serializer.instance.id} retransmitido a {room_group_name}")
+        except Exception as e:
+            # Si Redis falla, al menos que no se rompa la vista HTTP
+            print(f"ERROR: No se pudo retransmitir el mensaje por WebSocket. {e}")
+        # --- ¡FIN DE CÓDIGO NUEVO PARA WEBSOCKET! ---
+
         headers = self.get_success_headers(read_serializer.data)
         return Response(read_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
@@ -639,3 +649,40 @@ class GradebookView(generics.ListAPIView):
         return Assignment.objects.filter(
             lesson__module__course_id=course_id
         ).order_by('due_date', 'lesson__order')
+
+# ====================================================================
+# NUEVA VISTA: Lista de Conversaciones (Inbox)
+# ====================================================================
+class GroupChatListView(generics.ListAPIView):
+    """
+    Devuelve todos los chats grupales (cursos)
+    en los que el usuario actual participa.
+    """
+    serializer_class = ConversationListSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Devuelve solo las conversaciones que son de GRUPO
+        return self.request.user.conversations.filter(
+            is_group=True
+        ).annotate(
+            last_message_time=Max('messages__timestamp')
+        ).order_by('-last_message_time')
+
+# --- ¡¡AÑADE ESTA NUEVA CLASE AQUÍ!! ---
+class DirectMessageListView(generics.ListAPIView):
+    """
+    Devuelve todos los chats 1-a-1 (no grupales)
+    en los que el usuario actual participa.
+    """
+    serializer_class = ConversationListSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Devuelve solo las conversaciones que NO son de GRUPO
+        return self.request.user.conversations.filter(
+            is_group=False
+        ).annotate(
+            last_message_time=Max('messages__timestamp')
+        ).order_by('-last_message_time')
+# --- FIN DE LA NUEVA CLASE ---

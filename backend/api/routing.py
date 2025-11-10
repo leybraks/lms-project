@@ -10,6 +10,9 @@ websocket_urlpatterns = [
         r'^ws/chat/lesson/(?P<lesson_id>\d+)/$', 
         consumers.ChatConsumer.as_asgi()
     ),
-    
+    re_path(
+        r'^ws/chat/conversation/(?P<conversation_id>\d+)/$', 
+        consumers.InboxConsumer.as_asgi() # <-- Usará un nuevo Consumidor
+    ),
     # (En el futuro, aquí pondríamos más rutas, como la de gamificación)
 ]

@@ -18,6 +18,7 @@ class User(AbstractUser):
         null=True, 
         help_text="Ej: Desarrollador Full-Stack & Experto en IA"
     )
+    experience_points = models.IntegerField(default=0, help_text="XP para la mascota")
     bio = models.TextField(blank=True, null=True, help_text="Biografía del instructor")
     # Nota: Asegúrate de tener 'api.User' en tu settings.AUTH_USER_MODEL
 

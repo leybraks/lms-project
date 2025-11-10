@@ -36,7 +36,6 @@ INSTALLED_APPS = [
     'channels',
     'rest_framework_simplejwt',
     'corsheaders',
-    'api',
     'rest_framework',
     'django.contrib.sites',
     'django.contrib.admin',
@@ -45,7 +44,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-
+    'api.apps.ApiConfig',
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
@@ -228,4 +227,4 @@ CHANNEL_LAYERS = {
         },
     },
 }
-
+CORS_ALLOW_CREDENTIALS = True

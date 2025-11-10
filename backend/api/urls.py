@@ -26,6 +26,7 @@ from .views import (
     GroupChatListView,
     LessonNoteViewSet,
     GradebookView,
+    DirectMessageListView,
     get_dashboard_stats,
     get_me_view # Importamos esta también, ya que existe en views.py
 ) 
@@ -67,6 +68,7 @@ urlpatterns = [
     path('inbox/conversations/<int:conversation_id>/messages/', MessageListView.as_view(), name='message-list-create'),
     path('inbox/contacts/', ContactListView.as_view(), name='contact-list'),
     path('inbox/start_dm/', StartDirectMessageView.as_view(), name='start-direct-message'),
+    path('inbox/dm_chats/', DirectMessageListView.as_view(), name='dm-chat-list'),
     path('courses/all/', ListaDeCursosView.as_view(), name='course-list-all'),
     path('courses/<int:course_id>/grades/', GradebookView.as_view(), name='gradebook-list'),
     path('', include(router.urls)),
