@@ -30,6 +30,7 @@ from .views import (
     LessonChatListView,
     MarkAsReadView,
     ReadReceiptListView,
+    create_live_quiz,
     get_course_students,     # <-- ¡NUEVA!
     add_experience_points,
     get_dashboard_stats,
@@ -83,7 +84,7 @@ urlpatterns = [
     path('course/<int:course_id>/students/', get_course_students, name='get_course_students'),
     path('users/<int:user_id>/add-xp/', add_experience_points, name='add_experience_points'),
     path('course/<int:course_id>/quizzes/', get_course_quizzes, name='get_course_quizzes'), 
-    
+    path('course/<int:course_id>/create_live_quiz/', create_live_quiz, name='create_live_quiz'),
     path('', include(router.urls)),
 ]
 if settings.DEBUG:

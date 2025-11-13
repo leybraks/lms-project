@@ -1,54 +1,72 @@
 # backend/api/consumers.py
 import json # <-- ¡Importación que faltaba!
 from channels.generic.websocket import AsyncWebsocketConsumer
+import asyncio
 from channels.db import database_sync_to_async
-from .models import Lesson, Message, Conversation, User, Enrollment,Quiz # <-- ¡Importa User!
+from .models import Lesson, Message, Conversation, User, Enrollment,Quiz, Question, Choice # <-- ¡Importa User!
 from .serializers import MessageSerializer, UserSerializer
 from django.db.models import F
 from django.core.cache import cache
 # (User = get_user_model() no es necesario si lo importamos directamente)
 
 class ChatConsumer(AsyncWebsocketConsumer):
+    """
+    Este Consumer maneja todo lo que pasa en la lección en vivo:
+    1. Chat de la Lección
+    2. Sistema de Presencia (Conectado/Desconectado)
+    3. Gamificación Pilar 1 (Dar XP)
+    4. Gamificación Pilar 2 (Juego de Quiz en Vivo)
+    """
     
     async def connect(self):
+        # --- 1. CONFIGURACIÓN INICIAL ---
+        print("\n[CONSUMER LOG] connect() INICIADO.")
+        
         self.lesson_id = self.scope['url_route']['kwargs']['lesson_id']
         self.user = self.scope['user']
         
+        print(f"[CONSUMER LOG] Usuario desde middleware: {self.user}")
+
+        # --- 2. VALIDACIÓN (GUARDIA) ---
         if not self.user.is_authenticated:
+            print("[CONSUMER LOG] RECHAZADO: Usuario no autenticado.")
             await self.close()
             return
 
         self.lesson = await self.get_lesson()
         if not self.lesson:
+            print("[CONSUMER LOG] RECHAZADO: Lección no encontrada.")
             await self.close()
             return
+
         is_enrolled = await self.check_enrollment()
         is_professor = self.user == self.lesson.module.course.professor
         
         if not (is_enrolled or is_professor):
-            await self.close() # Rechaza si no es alumno ni profesor
+            print(f"[CONSUMER LOG] RECHAZADO: Usuario '{self.user}' no inscrito ni es profesor.")
+            await self.close()
             return
         
+        # --- 3. CONFIGURACIÓN EXITOSA ---
         self.conversation = await self.get_or_create_conversation()
-        
         await self.add_user_to_conversation()
         self.room_group_name = f'chat_lesson_{self.lesson_id}'
+        self.game_cache_key = f"live_quiz_{self.room_group_name}" # Clave para el estado del juego
         
         await self.channel_layer.group_add(
             self.room_group_name,
             self.channel_name
         )
         
+        print(f"[CONSUMER LOG] ACEPTADO: Conexión aceptada para {self.user.username}.")
         await self.accept()
-
         
 
     async def disconnect(self, close_code):
-        # Primero, comprueba si la conexión tuvo éxito
-        # (es decir, si 'connect' llegó a crear estos atributos)
+        # Comprueba si la conexión tuvo éxito antes de hacer nada
         if hasattr(self, 'room_group_name') and hasattr(self, 'user') and self.user.is_authenticated:
             
-            # Si todo existe, AHORA SÍ podemos enviar el aviso "user_left"
+            # Avisa a todos que el usuario se fue
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
@@ -57,23 +75,22 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 }
             )
             
-            # Y sacar al usuario del grupo
+            # Saca al usuario del grupo
             await self.channel_layer.group_discard(
                 self.room_group_name,
                 self.channel_name
             )
 
-    # --- ¡¡¡MÉTODO 'receive' ACTUALIZADO!!! ---
-    
     async def receive(self, text_data):
-        
-        # --- ¡PRINT 1: Muestra todo lo que llega! ---
+        """
+        El "router" principal. Recibe todos los mensajes del frontend.
+        """
         print(f"\n[CONSUMER LOG] Mensaje recibido: {text_data}")
         
         data = json.loads(text_data)
         message_type = data.get('message_type')
         
-        # --- Ruta 1: Es un mensaje de Chat (TEXT o CODE) ---
+        # --- Ruta 1: Mensaje de Chat (TEXT o CODE) ---
         if message_type in ['TEXT', 'CODE']:
             print(f"[CONSUMER LOG] Detectado: Mensaje de Chat")
             content = data.get('content')
@@ -86,110 +103,53 @@ class ChatConsumer(AsyncWebsocketConsumer):
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
-                    'type': 'chat_message', # Llama a la función 'chat_message'
+                    'type': 'chat_message',
                     'message': message_data
                 }
             )
             
-        # --- Ruta 2: Es un evento de Gamificación ---
+        # --- Ruta 2: Dar XP (Pilar 1) ---
         elif message_type == 'GIVE_XP':
             print(f"[CONSUMER LOG] Detectado: GIVE_XP")
-            # 1. Comprobar si el que envía es Profesor
-            if not self.user.role == 'PROFESSOR':
-                return # Ignora la petición si no es un profesor
-                
-            # 2. Obtener los datos
-            target_user_id = data.get('target_user_id')
-            points = data.get('points', 10) # 10 puntos por defecto
+            if not self.user.role == 'PROFESSOR': return
             
-            if not target_user_id:
-                return
+            target_user_id = data.get('target_user_id')
+            points = data.get('points', 10)
+            if not target_user_id: return
 
-            # 3. Otorgar los puntos en la BBDD
             target_user = await self.award_points(target_user_id, points)
             
             if target_user:
-                # 4. Retransmitir la notificación a TODOS en la sala
                 await self.channel_layer.group_send(
                     self.room_group_name,
                     {
-                        'type': 'xp_notification', # Llama a la función 'xp_notification'
+                        'type': 'xp_notification',
                         'user_id': target_user.id,
                         'username': target_user.username,
                         'points': points,
                         'total_xp': target_user.experience_points
                     }
                 )
+
+        # --- Ruta 3: Iniciar Quiz (Pilar 2) ---
         elif message_type == 'START_QUIZ':
-            if not self.user.role == 'PROFESSOR':
-                return
+            print(f"[CONSUMER LOG] Detectado: START_QUIZ")
+            if not self.user.role == 'PROFESSOR': return
+            
             quiz_id = data.get('quiz_id')
-            if not quiz_id:
-                return
+            if not quiz_id: return
+            await self.start_game(quiz_id)
 
-            # 1. Obtener la pregunta (tu código existente)
-            first_question = await self.get_quiz_question(quiz_id, 0)
-
-            if first_question:
-
-                # --- ¡AÑADE ESTA LÓGICA DE CACHÉ! ---
-                # 2. Inicializar el marcador para esta pregunta
-                cache_key = f"quiz_stats_{first_question['question_id']}"
-
-                # Crea un diccionario de contadores para cada opción
-                initial_stats = {
-                    'choices': {choice['id']: 0 for choice in first_question['choices']},
-                    'total': 0
-                }
-                # Guarda el marcador en el caché por 10 minutos
-                cache.set(cache_key, initial_stats, timeout=600)
-                # --- FIN DE LA LÓGICA DE CACHÉ ---
-
-                # 3. Retransmitir la pregunta (tu código existente)
-                await self.channel_layer.group_send(
-                    self.room_group_name,
-                    {
-                        'type': 'quiz_question',
-                        'question_data': first_question
-                    }
-                )
-        # --- ¡NUEVA RUTA! 4: Alumno envía respuesta ---
+        # --- Ruta 4: Responder Quiz (Pilar 2) ---
         elif message_type == 'SUBMIT_ANSWER':
+            print(f"[CONSUMER LOG] Detectado: SUBMIT_ANSWER")
             question_id = data.get('question_id')
             choice_id = data.get('choice_id')
-
-            # --- ¡INICIA LA NUEVA LÓGICA DE VOTACIÓN! ---
-            cache_key = f"quiz_stats_{question_id}"
-            stats = cache.get(cache_key)
-
-            if stats and choice_id in stats['choices']:
-                # (Opcional: añadir lógica para evitar que un usuario vote dos veces)
-
-                # 1. Actualiza el contador
-                stats['choices'][choice_id] += 1
-                stats['total'] += 1
-
-                # 2. Guarda el nuevo marcador en el caché
-                cache.set(cache_key, stats, timeout=600)
-
-                # 3. ¡Retransmite las nuevas estadísticas a TODOS!
-                await self.channel_layer.group_send(
-                    self.room_group_name,
-                    {
-                        'type': 'quiz_stats_update', # ¡Nuevo handler!
-                        'stats': stats,
-                        'question_id': question_id
-                    }
-                )
-            # --- FIN DE LA NUEVA LÓGICA ---
-            else:
-                # El quiz expiró del caché o la respuesta es inválida
-                print(f"Stats no encontradas para {cache_key} o choice_id {choice_id} inválido")
+            await self.record_answer(question_id, choice_id, self.user)
         
+        # --- Ruta 5: Anunciar Presencia (Sistema de Conexión) ---
         elif message_type == 'ANNOUNCE_PRESENCE':
-            # --- ¡PRINT 2: El más importante! ---
             print(f"[CONSUMER LOG] Detectado: ANNOUNCE_PRESENCE para {self.user.username}")
-            
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
@@ -201,92 +161,240 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 }
             )
         else:
-            # --- PRINT 3: Si el mensaje no es reconocido ---
             print(f"[CONSUMER LOG] ADVERTENCIA: Mensaje tipo '{message_type}' no reconocido.")
 
-    async def quiz_question(self, event):
-        # Envía la pregunta a todos los clientes (alumnos y tutor)
+    # ====================================================================
+    # --- HANDLERS (Envían mensajes AL FRONTEND) ---
+    # ====================================================================
+
+    async def chat_message(self, event):
+        """ Handler para: 'chat_message' """
         await self.send(text_data=json.dumps({
-            'type': 'quiz_question', # Tipo para que React sepa qué es
-            'data': event['question_data']
+            'type': 'chat_message',
+            'message': event['message']
         }))
-        
-    # --- ¡NUEVO HANDLER! (para el tipo 'quiz_answer_received') ---
-    async def quiz_answer_received(self, event):
-        # Envía la notificación de respuesta a todos
-        await self.send(text_data=json.dumps({
-            'type': 'quiz_answer_received',
-            'data': {
-                'user_id': event['user_id'],
-                'username': event['username']
-            }
-        }))
-    # --- ¡NUEVO! Handler para enviar notificaciones de XP ---
+
     async def xp_notification(self, event):
-        # Simplemente reenvía el evento a todos los clientes
-        # (El frontend decidirá si muestra o no una alerta)
+        """ Handler para: 'xp_notification' """
         await self.send(text_data=json.dumps(event))
 
-    # --- Handler de Chat (ACTUALIZADO) ---
-    async def chat_message(self, event):
-        message = event['message']
-        await self.send(text_data=json.dumps({
-            'type': 'chat_message', # <-- Añadimos un tipo
-            'message': message
-        }))
     async def user_joined(self, event):
-        """
-        Envía un mensaje a este WebSocket cuando un *nuevo* usuario se une.
-        """
+        """ Handler para: 'user_joined' """
         print(f"[CONSUMER LOG] Retransmitiendo 'user_joined' para: {event['user']['username']}")
         await self.send(text_data=json.dumps({
             'type': 'user_joined',
-            'user': event['user'] # { 'id': ..., 'username': ... }
+            'user': event['user']
         }))
 
     async def user_left(self, event):
-        """
-        Envía un mensaje a este WebSocket cuando un usuario se va.
-        """
+        """ Handler para: 'user_left' """
+        print(f"[CONSUMER LOG] Retransmitiendo 'user_left' para: {event['user_id']}")
         await self.send(text_data=json.dumps({
             'type': 'user_left',
             'user_id': event['user_id']
         }))
-    async def quiz_stats_update(self, event):
-        """
-        Envía las estadísticas actualizadas del quiz a todos en el grupo.
-        """
+
+    async def quiz_question(self, event):
+        """ Handler para: 'quiz_question' """
+        print(f"[CONSUMER LOG] Retransmitiendo 'quiz_question'")
         await self.send(text_data=json.dumps({
-            'type': 'quiz_stats_update',
-            'data': {
-                'stats': event['stats'],
-                'question_id': event['question_id']
-            }
+            'type': 'quiz_question',
+            'data': event['data']
         }))
-    # --- Funciones de Base de Datos (Seguras) ---
-    @database_sync_to_async
-    def get_quiz_question(self, quiz_id, question_index=0):
-        try:
-            # Obtenemos el quiz
-            quiz = Quiz.objects.get(id=quiz_id)
+
+    async def quiz_ranking_update(self, event):
+        """ Handler para: 'quiz_ranking_update' """
+        print(f"[CONSUMER LOG] Retransmitiendo 'quiz_ranking_update'")
+        await self.send(text_data=json.dumps({
+            'type': 'quiz_ranking_update',
+            'data': event['data']
+        }))
+
+    async def quiz_final_results(self, event):
+        """ Handler para: 'quiz_final_results' """
+        print(f"[CONSUMSito! ER LOG] Retransmitiendo 'quiz_final_results'")
+        await self.send(text_data=json.dumps({
+            'type': 'quiz_final_results',
+            'data': event['data']
+        }))
+
+    # ====================================================================
+    # --- LÓGICA DEL JUEGO DE QUIZ (Pilar 2) ---
+    # ====================================================================
+
+    async def start_game(self, quiz_id):
+        """ Carga el quiz y prepara el estado del juego en el caché. """
+        questions = await self.get_all_quiz_questions(quiz_id)
+        if not questions:
+            print(f"Error: No se encontraron preguntas para el quiz {quiz_id}")
+            return
             
-            # Obtenemos la primera pregunta (o la que toque)
-            question = quiz.questions.order_by('order').all()[question_index]
+        game_state = {
+            "quiz_id": quiz_id,
+            "current_question_index": 0,
+            "questions": questions,
+            "ranking": {},
+            "current_question_answers": {}
+        }
+        
+        cache.set(self.game_cache_key, game_state, timeout=3600)
+        print(f"Juego {quiz_id} iniciado y guardado en caché.")
+        await self.send_next_question()
+
+    async def send_next_question(self):
+        """ Envía la siguiente pregunta o termina el juego. """
+        game_state = cache.get(self.game_cache_key)
+        if not game_state: return
+
+        index = game_state["current_question_index"]
+        
+        if index < len(game_state["questions"]):
+            question = game_state["questions"][index]
             
-            # Obtenemos las opciones
-            choices = list(question.choices.all().values('id', 'text'))
+            game_state["current_question_answers"] = {}
+            cache.set(self.game_cache_key, game_state, timeout=3600)
+
+            print(f"Enviando pregunta {index + 1}")
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'quiz_question',
+                    'data': {
+                        'question': question,
+                        'question_number': index + 1,
+                        'total_questions': len(game_state["questions"]),
+                        'timer': 15 # ¡Temporizador de 15 segundos!
+                    }
+                }
+            )
             
-            # Preparamos el paquete de datos para enviar al frontend
-            # ¡Importante! NO enviamos 'is_correct' al alumno
-            return {
-                'quiz_title': quiz.title,
-                'question_id': question.id,
-                'question_text': question.text,
-                'choices': choices # Lista de {'id': 1, 'text': 'Opción A'}
+            # ¡Inicia el temporizador!
+            await asyncio.sleep(15)
+            
+            # Cuando el tiempo se acaba, muestra el ranking
+            await self.show_ranking()
+            
+        else:
+            await self.end_game()
+
+    async def record_answer(self, question_id, choice_id, user):
+        """ Registra la respuesta de un alumno y actualiza su puntaje. """
+        game_state = cache.get(self.game_cache_key)
+        if not game_state: return
+        
+        if user.id in game_state["current_question_answers"]:
+            print(f"Usuario {user.username} ya respondió.")
+            return
+
+        index = game_state["current_question_index"]
+        question = game_state["questions"][index]
+        
+        if question['id'] != question_id:
+            print("Respuesta de una pregunta anterior. Ignorando.")
+            return
+            
+        is_correct = await self.check_answer_correct(choice_id)
+        
+        points = 0
+        if is_correct:
+            points = max(100, 1000 - (len(game_state["current_question_answers"]) * 50))
+            
+        if user.id not in game_state["ranking"]:
+            game_state["ranking"][user.id] = { "username": user.username, "score": 0 }
+        
+        game_state["ranking"][user.id]["score"] += points
+        game_state["current_question_answers"][user.id] = True
+        
+        cache.set(self.game_cache_key, game_state, timeout=3600)
+        
+        sorted_ranking = sorted(
+            game_state["ranking"].values(), 
+            key=lambda x: x['score'], 
+            reverse=True
+        )
+        
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'quiz_ranking_update',
+                'data': {
+                    'ranking': sorted_ranking,
+                    'is_final': False
+                }
             }
+        )
+
+    async def show_ranking(self):
+        """ Muestra el ranking y pasa a la siguiente pregunta. """
+        game_state = cache.get(self.game_cache_key)
+        if not game_state: return
+        
+        game_state["current_question_index"] += 1
+        cache.set(self.game_cache_key, game_state, timeout=3600)
+        
+        await self.send_next_question()
+
+    async def end_game(self):
+        """ Termina el juego, otorga puntos de mascota y muestra el ranking final. """
+        game_state = cache.get(self.game_cache_key)
+        if not game_state: return
+        
+        sorted_ranking = sorted(
+            game_state["ranking"].values(), 
+            key=lambda x: x['score'], 
+            reverse=True
+        )
+        
+        prizes = [15, 10, 5]
+        for i, player in enumerate(sorted_ranking[:3]):
+            player_id = next((uid for uid, data in game_state["ranking"].items() if data["username"] == player["username"]), None)
+            if player_id:
+                print(f"Dando {prizes[i]} XP a {player['username']}")
+                await self.award_points(player_id, prizes[i])
+
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'quiz_final_results',
+                'data': {
+                    'ranking': sorted_ranking,
+                    'is_final': True
+                }
+            }
+        )
+        
+        cache.delete(self.game_cache_key)
+
+    # ====================================================================
+    # --- FUNCIONES DE BASE DE DATOS (Seguras) ---
+    # ====================================================================
+
+    @database_sync_to_async
+    def get_all_quiz_questions(self, quiz_id):
+        """ Obtiene un Quiz y TODAS sus preguntas y opciones. """
+        try:
+            quiz = Quiz.objects.get(id=quiz_id, quiz_type='LIVE')
+            questions_data = []
+            for question in quiz.questions.order_by('order').prefetch_related('choices'):
+                questions_data.append({
+                    'id': question.id,
+                    'text': question.text,
+                    'choices': list(question.choices.all().values('id', 'text'))
+                })
+            return questions_data
         except Exception as e:
-            print(f"Error al obtener pregunta de quiz: {e}")
+            print(f"Error al obtener todas las preguntas del quiz: {e}")
             return None
+
+    @database_sync_to_async
+    def check_answer_correct(self, choice_id):
+        """ Verifica si una 'Choice' (Opción) es correcta. """
+        try:
+            # Asegurarse de que el choice_id sea un entero
+            return Choice.objects.get(id=int(choice_id)).is_correct
+        except (Choice.DoesNotExist, ValueError, TypeError):
+            return False
+
     @database_sync_to_async
     def get_lesson(self):
         try:
@@ -302,7 +410,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if self.lesson.chat_conversation:
             return self.lesson.chat_conversation
         
-        # Fallback si el signal no se ejecutó
         group_chat = Conversation.objects.create(
             course=self.lesson.module.course,
             is_group=True,
@@ -331,20 +438,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def serialize_message(self, message):
-        # (Pasamos el 'UserSerializer' al contexto para el 'sender' anidado)
         return MessageSerializer(message, context={'user_serializer': UserSerializer}).data
         
-    # --- ¡NUEVA FUNCIÓN DE BBDD! ---
     @database_sync_to_async
     def award_points(self, user_id, points):
         try:
             user_to_award = User.objects.get(id=user_id)
-            # Usamos F() para evitar 'race conditions' (conflictos)
-            from django.db.models import F
             user_to_award.experience_points = F('experience_points') + points
             user_to_award.save(update_fields=['experience_points'])
             
-            # Recargamos el objeto para obtener el nuevo valor total
             user_to_award.refresh_from_db()
             return user_to_award
         except User.DoesNotExist:
@@ -352,13 +454,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
     
     @database_sync_to_async
     def check_enrollment(self):
-        """
-        Comprueba si el usuario está inscrito en el curso de esta lección.
-        """
         return Enrollment.objects.filter(
             user=self.user,
             course=self.lesson.module.course
         ).exists()
+
 
 class InboxConsumer(AsyncWebsocketConsumer):
     """

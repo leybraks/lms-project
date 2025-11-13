@@ -582,7 +582,7 @@ const ProfessorPanel = ({
                   onChange={(e) => setSelectedQuizId(e.target.value)}
                   value={selectedQuizId || ""}
                 >
-                  {quizzes.map(quiz => (
+                  {quizzes?.map(quiz => (
                     <MenuItem key={quiz.id} value={quiz.id}>
                       {quiz.title}
                     </MenuItem>
@@ -1514,7 +1514,7 @@ function LessonPage() {
                                     {/* ¡RECURSOS ES REAL! */}
                                     <List sx={{p: 2}}>
                                     {lesson.resources && lesson.resources.length > 0 ? (
-                                      lesson.resources.map(resource => (
+                                      lesson.resources?.map(resource => (
                                         <ListItemButton key={resource.id} component="a" href={resource.file} target="_blank" rel="noopener noreferrer" sx={{borderRadius: 2}}>
                                           <ListItemAvatar>
                                             <Avatar sx={{bgcolor: 'primary.main'}}><CloudDownloadIcon /></Avatar>
@@ -1677,7 +1677,7 @@ function LessonPage() {
               {quizModalData.question_text}
             </Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 3 }}>
-              {quizModalData.choices.map(choice => (
+              {quizModalData.choices?.map(choice => (
                 <Button
                   key={choice.id}
                   variant="outlined"

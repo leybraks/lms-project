@@ -17,10 +17,11 @@ from django.db.models import OuterRef, Subquery, Exists, Value
 from django.db.models.functions import Coalesce
 from django.core.exceptions import PermissionDenied
 import requests
+from django.db import transaction
 from rest_framework.pagination import PageNumberPagination
 # Imports de Modelos y Serializers de tu app
 from .models import Course, Enrollment, Lesson, LessonCompletion, Assignment, Submission, Quiz, User,Conversation, Message,LessonNote,ReadReceipt
-from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer, AssignmentSerializer, SubmissionSerializer, QuizSerializer,ConversationListSerializer,MessageSerializer, MessageCreateSerializer, LessonNoteSerializer, GradedItemSerializer,ReadReceiptSerializer,StudentListSerializer
+from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer, AssignmentSerializer, SubmissionSerializer, QuizSerializer,ConversationListSerializer,MessageSerializer, MessageCreateSerializer, LessonNoteSerializer, GradedItemSerializer,ReadReceiptSerializer,StudentListSerializer, Question, Choice
 
 # ====================================================================
 # 1. Vistas de Cursos
@@ -952,27 +953,99 @@ def add_experience_points(request, user_id):
         return Response({'error': str(e)}, status=500)
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated]) # Deberías crear un permiso IsProfessor
+@permission_classes([IsAuthenticated])
 def get_course_quizzes(request, course_id):
     """
-    Devuelve una lista de todos los Quizzes asociados a un curso,
-    para que el tutor pueda seleccionar uno para lanzar en vivo.
+    Devuelve una lista de todos los Quizzes EN VIVO (tipo Kahoot)
+    asociados a un curso.
     """
     if not request.user.role == 'PROFESSOR':
         return Response({'error': 'No tienes permiso'}, status=status.HTTP_403_FORBIDDEN)
     
     try:
-        # Busca todos los quizzes cuyos módulos pertenezcan al curso_id
-        quizzes = Quiz.objects.filter(module__course_id=course_id)
+        # --- ¡CAMBIO EN EL FILTRO! ---
+        # Antes buscaba por 'module__course_id'.
+        # Ahora buscamos directamente por 'course_id' Y por el nuevo 'quiz_type'.
+        quizzes = Quiz.objects.filter(
+            course_id=course_id,
+            quiz_type='LIVE' # <-- ¡SOLO TRAE LOS QUIZZES EN VIVO!
+        )
         
-        # Usamos tu QuizSerializer (que ya existe)
         serializer = QuizSerializer(quizzes, many=True)
         return Response(serializer.data)
 
     except Exception as e:
         return Response({'error': str(e)}, status=500)
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@transaction.atomic # <-- ¡Importante! Si algo falla, no se guarda nada.
+def create_live_quiz(request, course_id):
+    """
+    Crea un nuevo Quiz de tipo 'LIVE' con todas sus preguntas
+    y opciones anidadas.
 
+    Espera un JSON como:
+    {
+        "title": "Mi nuevo Quiz en Vivo",
+        "questions": [
+            {
+                "text": "¿Pregunta 1?",
+                "choices": [
+                    { "text": "Opción A", "is_correct": false },
+                    { "text": "Opción B", "is_correct": true }
+                ]
+            },
+            { ... }
+        ]
+    }
+    """
+    if not request.user.role == 'PROFESSOR':
+        return Response({'error': 'No tienes permiso'}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        course = Course.objects.get(id=course_id)
+        data = request.data
+
+        # 1. Crear el Quiz principal
+        live_quiz = Quiz.objects.create(
+            course=course,
+            quiz_type='LIVE', # <-- ¡Lo marcamos como 'LIVE'!
+            title=data.get('title', 'Nuevo Quiz en Vivo')
+            # (Dejamos 'module' en null)
+        )
+
+        # 2. Iterar sobre las preguntas anidadas
+        questions_data = data.get('questions', [])
+        for q_order, question_data in enumerate(questions_data):
+
+            # Crea la Pregunta
+            question = Question.objects.create(
+                quiz=live_quiz,
+                text=question_data.get('text', 'Sin texto'),
+                order=q_order
+            )
+
+            # 3. Iterar sobre las opciones anidadas
+            choices_data = question_data.get('choices', [])
+            for choice_data in choices_data:
+
+                # Crea la Opción
+                Choice.objects.create(
+                    question=question,
+                    text=choice_data.get('text', 'Sin texto'),
+                    is_correct=choice_data.get('is_correct', False)
+                )
+
+        # Devuelve el quiz recién creado (opcional, pero útil)
+        serializer = QuizSerializer(live_quiz)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    except Course.DoesNotExist:
+        return Response({'error': 'Curso no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        # Si algo falla, @transaction.atomic revierte todos los cambios
+        return Response({'error': f'Error creando el quiz: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 

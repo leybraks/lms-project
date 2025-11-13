@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-#!a#0sh%yhup$dr*2t2n%zpo-w9v!v@v962wv_65&%c$qja$-e
 DEBUG = True
 
 # Añadimos localhost para desarrollo
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '.onrender.com']
 
 
 # Application definition
@@ -145,6 +145,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:5174",  # <--- ¡AÑADE ESTA LÍNEA!
+    'http://localhost:3000',
     "http://127.0.0.1:5174"
 ]
 CORS_ALLOW_METHODS = [
@@ -228,3 +229,4 @@ CHANNEL_LAYERS = {
     },
 }
 CORS_ALLOW_CREDENTIALS = True
+

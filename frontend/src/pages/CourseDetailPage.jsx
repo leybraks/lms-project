@@ -4,7 +4,9 @@ import axiosInstance from '../api/axios';
 import { useTheme } from '@mui/material/styles';
 import { motion } from "framer-motion";
 import { useAuth } from '../context/AuthContext'; // <-- ¡NUEVA IMPORTACIÓN!
-
+import CreateLiveQuiz from '../components/CreateLiveQuiz';
+import BarChartIcon from '@mui/icons-material/BarChart';
+import GradeIcon from '@mui/icons-material/Grade';
 import {
   Box,
   Typography,
@@ -51,7 +53,7 @@ import VideoLabelIcon from '@mui/icons-material/VideoLabel';
 import AllInclusiveIcon from '@mui/icons-material/AllInclusive';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import EditIcon from '@mui/icons-material/Edit'; // <-- ¡NUEVO ICONO!
-import BarChartIcon from '@mui/icons-material/BarChart'; // <-- ¡NUEVO ICONO!
+
 
 // === VARIANTES DE ANIMACIÓN (Sin cambios) ===
 const containerVariants = {
@@ -115,7 +117,7 @@ function CourseDetailPage() {
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [snackbarSeverity, setSnackbarSeverity] = useState("success");
   const [completedLessons, setCompletedLessons] = useState([]); 
-
+  const [adminTab, setAdminTab] = useState(0);
   // --- ¡¡¡LÓGICA DE CARGA ACTUALIZADA CON ROLES!!! ---
   useEffect(() => {
     // No hacer nada si el usuario o el curso aún no han cargado
@@ -445,95 +447,178 @@ function CourseDetailPage() {
       {/* 2. CONTENIDO PRINCIPAL (Columna ancha) */}
       <Container maxWidth="xl" sx={{ mt: 4, mb: 4, px: {xs: 2, md: 3} }}>
         
-        <Grid container spacing={4}>
-          
-          {/* --- COLUMNA ANCHA DE CONTENIDO --- */}
-          <Grid item xs={12}> 
-            
-            {/* --- ¿Qué aprenderás? --- */}
-            <motion.div variants={itemVariants}>
-              <Paper sx={{...cleanPaperStyle(theme), mb: 4 }}>
-                <Typography variant="h4" sx={{ fontWeight: 600, mb: 2 }}>Qué aprenderás</Typography>
-                <List sx={{ color: 'text.secondary', columns: { xs: 1, sm: 2 } }}>
-                  {course.learning_objectives.map(obj => (
-                    <ListItem key={obj.id} sx={{p:0, mb: 1, breakInside: 'avoid-column'}}>
-                      <ListItemIcon sx={{minWidth: 32, color: 'success.main'}}><CheckCircleIcon fontSize="small" /></ListItemIcon>
-                      <ListItemText primary={obj.description} />
-                    </ListItem>
-                  ))}
-                </List>
-              </Paper>
-            </motion.div>
+        {/* --- VISTA DEL PROFESOR (isOwner) --- */}
+        {isOwner ? (
+          <Paper sx={{...cleanPaperStyle(theme), p: 0, overflow: 'hidden'}}>
+            {/* Pestañas de Administración */}
+            <Box sx={{ borderBottom: 1, borderColor: 'divider', px: { xs: 1, md: 3 } }}>
+              <Tabs 
+                value={adminTab} 
+                onChange={(e, newValue) => setAdminTab(newValue)} 
+                variant="scrollable"
+                scrollButtons="auto"
+              >
+                <Tab label="Contenido (Syllabus)" icon={<AutoStoriesIcon />} iconPosition="start" />
+                <Tab label="Crear Quiz en Vivo" icon={<EmojiEventsIcon />} iconPosition="start" />
+                <Tab label="Crear Quiz de Lección" icon={<AssessmentIcon />} iconPosition="start" />
+                <Tab label="Calificaciones" icon={<GradeIcon />} iconPosition="start" />
+                <Tab label="Asistencia" icon={<ChecklistIcon />} iconPosition="start" />
+                <Tab label="Archivos y Tareas" icon={<ArticleIcon />} iconPosition="start" />
+              </Tabs>
+            </Box>
 
-            {/* --- Contenido del Curso (Syllabus) --- */}
-            <motion.div variants={itemVariants}>
-              <Paper sx={{...cleanPaperStyle(theme), mb: 4}}>
-                <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>Contenido del Curso</Typography>
-                
-                {/* ¡LÓGICA ACTUALIZADA! Visible para inscritos O dueños */}
-                {(isEnrolled || isOwner) && course.modules && course.modules.length > 0 && (
-                  <Box sx={{ mt: 1 }}>
-                    {course.modules.map((module, index) => (
-                      <Accordion key={module.id} defaultExpanded={index === 0} sx={{ backgroundColor: 'background.default', border: `1px solid ${theme.palette.divider}`, borderRadius: 2, mb: 1.5, '&:before': { display: 'none' }, boxShadow: 'none' }}>
-                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                          <Typography sx={{ fontWeight: 600, fontSize: '1.1rem' }}>Módulo {module.order + 1}: {module.title}</Typography>
-                        </AccordionSummary>
-                        <AccordionDetails sx={{ p: 0, borderTop: `1px solid ${theme.palette.divider}` }}>
-                          <List dense disablePadding>
-                            {module.lessons && module.lessons.length > 0 ? (
-                              module.lessons.map((lesson) => {
-                                const isLessonCompleted = completedLessons.includes(lesson.id);
-                                return (
-                                  <ListItemButton key={lesson.id} onClick={() => navigate(`/courses/${courseId}/lessons/${lesson.id}`)} sx={{ pl: 3, py: 1.5 }}>
-                                    <ListItemIcon sx={{ minWidth: 32, color: isLessonCompleted ? 'success.main' : 'text.secondary' }}>
-                                      {isLessonCompleted ? <CheckCircleIcon fontSize="small" /> : <OndemandVideoIcon fontSize="small" />}
-                                    </ListItemIcon>
-                                    <ListItemText primary={`Lección ${lesson.order + 1}: ${lesson.title}`} primaryTypographyProps={{ opacity: isLessonCompleted ? 0.7 : 1 }} />
-                                  </ListItemButton>
-                                );
-                              })
-                            ) : ( <ListItem><ListItemText primary="No hay lecciones." /></ListItem> )}
-                          </List>
-                          {module.quiz && (
-                            <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}`, textAlign: 'left' }}>
-                              <Button variant="outlined" color="secondary" size="small" startIcon={<AssessmentIcon />} onClick={() => navigate(`/courses/${courseId}/modules/${module.id}/quiz`)}>Comenzar Examen</Button>
-                            </Box>
-                          )}
-                        </AccordionDetails>
-                      </Accordion>
+            {/* Panel 0: Contenido (Syllabus) - (Lo que ya tenías) */}
+            <Box sx={{ p: { xs: 2, md: 3 }, display: adminTab === 0 ? 'block' : 'none' }}>
+              <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>Contenido del Curso</Typography>
+              {course.modules && course.modules.length > 0 ? (
+                <Box sx={{ mt: 1 }}>
+                  {course.modules.map((module, index) => (
+                    <Accordion key={module.id} defaultExpanded={index === 0} sx={{ backgroundColor: 'background.default', border: `1px solid ${theme.palette.divider}`, borderRadius: 2, mb: 1.5, '&:before': { display: 'none' }, boxShadow: 'none' }}>
+                      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                        <Typography sx={{ fontWeight: 600, fontSize: '1.1rem' }}>Módulo {module.order + 1}: {module.title}</Typography>
+                      </AccordionSummary>
+                      <AccordionDetails sx={{ p: 0, borderTop: `1px solid ${theme.palette.divider}` }}>
+                        <List dense disablePadding>
+                          {module.lessons && module.lessons.length > 0 ? (
+                            module.lessons.map((lesson) => (
+                              <ListItemButton key={lesson.id} onClick={() => navigate(`/courses/${courseId}/lessons/${lesson.id}`)} sx={{ pl: 3, py: 1.5 }}>
+                                <ListItemIcon sx={{ minWidth: 32, color: 'text.secondary' }}><OndemandVideoIcon fontSize="small" /></ListItemIcon>
+                                <ListItemText primary={`Lección ${lesson.order + 1}: ${lesson.title}`} />
+                              </ListItemButton>
+                            ))
+                          ) : ( <ListItem><ListItemText primary="No hay lecciones." /></ListItem> )}
+                        </List>
+                        {module.quiz && (
+                          <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}`, textAlign: 'left' }}>
+                            <Button variant="outlined" color="secondary" size="small" startIcon={<AssessmentIcon />} onClick={() => navigate(`/courses/${courseId}/modules/${module.id}/quiz`)}>Editar Examen</Button>
+                          </Box>
+                        )}
+                      </AccordionDetails>
+                    </Accordion>
+                  ))}
+                </Box>
+              ) : (
+                <Alert severity="info">Aún no has añadido contenido. Haz clic en 'Editar Curso' para empezar.</Alert>
+              )}
+            </Box>
+
+            {/* Panel 1: Crear Quiz en Vivo (¡NUEVO!) */}
+            <Box sx={{ display: adminTab === 1 ? 'block' : 'none' }}>
+              <CreateLiveQuiz 
+                courseId={courseId} 
+                onQuizCreated={(newQuiz) => {
+                  console.log("Quiz en vivo creado:", newQuiz);
+                  setSnackbarMessage("¡Quiz en vivo creado con éxito!");
+                  setSnackbarSeverity("success");
+                  setSnackbarOpen(true);
+                  // (Aquí podrías recargar la lista de quizzes en LessonPage si fuera necesario)
+                }} 
+              />
+            </Box>
+            
+            {/* Panel 2: Crear Quiz de Lección (Maqueta) */}
+            <Box sx={{ p: { xs: 2, md: 3 }, display: adminTab === 2 ? 'block' : 'none' }}>
+               <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>Crear Quiz de Lección</Typography>
+               <Alert severity="info">Aquí irá el formulario para crear quizzes con nota (Pilar 3).</Alert>
+            </Box>
+
+            {/* Panel 3: Calificaciones (Maqueta) */}
+            <Box sx={{ p: { xs: 2, md: 3 }, display: adminTab === 3 ? 'block' : 'none' }}>
+               <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>Libro de Calificaciones</Typography>
+               <Alert severity="info">Aquí irá la tabla con las notas de todos los alumnos.</Alert>
+            </Box>
+            
+            {/* Panel 4: Asistencia (Maqueta) */}
+            <Box sx={{ p: { xs: 2, md: 3 }, display: adminTab === 4 ? 'block' : 'none' }}>
+               <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>Registro de Asistencia</Typography>
+               <Alert severity="info">Aquí podrás ver los reportes de asistencia de las clases en vivo.</Alert>
+            </Box>
+
+            {/* Panel 5: Archivos y Tareas (Maqueta) */}
+            <Box sx={{ p: { xs: 2, md: 3 }, display: adminTab === 5 ? 'block' : 'none' }}>
+               <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>Gestión de Tareas y Archivos</Typography>
+               <Alert severity="info">Aquí podrás subir archivos descargables y crear/editar tareas.</Alert>
+            </Box>
+
+          </Paper>
+
+        ) : (
+
+          // --- VISTA DEL ALUMNO (isEnrolled o Visitante) ---
+          <Grid container spacing={4}>
+            {/* Esta es la vista original que tenías */}
+            <Grid item xs={12}> 
+              <motion.div variants={itemVariants}>
+                <Paper sx={{...cleanPaperStyle(theme), mb: 4 }}>
+                  <Typography variant="h4" sx={{ fontWeight: 600, mb: 2 }}>Qué aprenderás</Typography>
+                  <List sx={{ color: 'text.secondary', columns: { xs: 1, sm: 2 } }}>
+                    {course.learning_objectives.map(obj => (
+                      <ListItem key={obj.id} sx={{p:0, mb: 1, breakInside: 'avoid-column'}}>
+                        <ListItemIcon sx={{minWidth: 32, color: 'success.main'}}><CheckCircleIcon fontSize="small" /></ListItemIcon>
+                        <ListItemText primary={obj.description} />
+                      </ListItem>
                     ))}
-                  </Box>
-                )}
-
-                {/* ¡LÓGICA DE ALERTAS ACTUALIZADA! */}
-                {!isEnrolled && !isOwner && <Alert severity="warning">Inscríbete para ver el contenido del curso.</Alert>}
-                
-                {(isEnrolled || isOwner) && (!course.modules || course.modules.length === 0) && (
-                  <Alert severity="info">
-                    {isOwner ? "Aún no has añadido contenido. Haz clic en 'Editar Curso' para empezar." : "El contenido estará disponible pronto."}
-                  </Alert>
-                )}
-
-              </Paper>
-            </motion.div>
-
-            {/* --- Requisitos --- */}
-            <motion.div variants={itemVariants}>
-              <Paper sx={{...cleanPaperStyle(theme), mb: 4 }}>
-                <Typography variant="h4" sx={{ fontWeight: 600, mb: 2 }}>Requisitos</Typography>
-                <List sx={{ color: 'text.secondary' }}>
-                  {course.requirements.map(req => (
-                    <ListItem key={req.id} sx={{p:0, mb: 1}}>
-                      <ListItemIcon sx={{minWidth: 32, color: 'primary.main'}}><ChecklistIcon fontSize="small" /></ListItemIcon>
-                      <ListItemText primary={req.description} />
-                    </ListItem>
-                  ))}
-                </List>
-              </Paper>
-            </motion.div>
-            
+                  </List>
+                </Paper>
+              </motion.div>
+              <motion.div variants={itemVariants}>
+                <Paper sx={{...cleanPaperStyle(theme), mb: 4}}>
+                  <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>Contenido del Curso</Typography>
+                  {isEnrolled && course.modules && course.modules.length > 0 && (
+                    <Box sx={{ mt: 1 }}>
+                      {course.modules.map((module, index) => (
+                        <Accordion key={module.id} defaultExpanded={index === 0} sx={{ backgroundColor: 'background.default', border: `1px solid ${theme.palette.divider}`, borderRadius: 2, mb: 1.5, '&:before': { display: 'none' }, boxShadow: 'none' }}>
+                          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                            <Typography sx={{ fontWeight: 600, fontSize: '1.1rem' }}>Módulo {module.order + 1}: {module.title}</Typography>
+                          </AccordionSummary>
+                          <AccordionDetails sx={{ p: 0, borderTop: `1px solid ${theme.palette.divider}` }}>
+                            <List dense disablePadding>
+                              {module.lessons && module.lessons.length > 0 ? (
+                                module.lessons.map((lesson) => {
+                                  const isLessonCompleted = completedLessons.includes(lesson.id);
+                                  return (
+                                    <ListItemButton key={lesson.id} onClick={() => navigate(`/courses/${courseId}/lessons/${lesson.id}`)} sx={{ pl: 3, py: 1.5 }}>
+                                      <ListItemIcon sx={{ minWidth: 32, color: isLessonCompleted ? 'success.main' : 'text.secondary' }}>
+                                        {isLessonCompleted ? <CheckCircleIcon fontSize="small" /> : <OndemandVideoIcon fontSize="small" />}
+                                      </ListItemIcon>
+                                      <ListItemText primary={`Lección ${lesson.order + 1}: ${lesson.title}`} primaryTypographyProps={{ opacity: isLessonCompleted ? 0.7 : 1 }} />
+                                    </ListItemButton>
+                                  );
+                                })
+                              ) : ( <ListItem><ListItemText primary="No hay lecciones." /></ListItem> )}
+                            </List>
+                            {module.quiz && (
+                              <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}`, textAlign: 'left' }}>
+                                <Button variant="outlined" color="secondary" size="small" startIcon={<AssessmentIcon />} onClick={() => navigate(`/courses/${courseId}/modules/${module.id}/quiz`)}>Comenzar Examen</Button>
+                              </Box>
+                            )}
+                          </AccordionDetails>
+                        </Accordion>
+                      ))}
+                    </Box>
+                  )}
+                  {!isEnrolled && <Alert severity="warning">Inscríbete para ver el contenido del curso.</Alert>}
+                  {isEnrolled && (!course.modules || course.modules.length === 0) && (
+                    <Alert severity="info">El contenido estará disponible pronto.</Alert>
+                  )}
+                </Paper>
+              </motion.div>
+              <motion.div variants={itemVariants}>
+                <Paper sx={{...cleanPaperStyle(theme), mb: 4 }}>
+                  <Typography variant="h4" sx={{ fontWeight: 600, mb: 2 }}>Requisitos</Typography>
+                  <List sx={{ color: 'text.secondary' }}>
+                    {course.requirements.map(req => (
+                      <ListItem key={req.id} sx={{p:0, mb: 1}}>
+                        <ListItemIcon sx={{minWidth: 32, color: 'primary.main'}}><ChecklistIcon fontSize="small" /></ListItemIcon>
+                        <ListItemText primary={req.description} />
+                      </ListItem>
+                    ))}
+                  </List>
+                </Paper>
+              </motion.div>
+            </Grid>
           </Grid>
-        </Grid>
+        )}
       </Container>
 
 

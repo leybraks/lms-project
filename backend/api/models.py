@@ -275,11 +275,37 @@ class Quiz(models.Model):
     """
     Un examen o "Quiz" asociado a un Módulo.
     """
+    QUIZ_TYPE_CHOICES = (
+        ('LESSON', 'Quiz de Lección'), 
+        ('LIVE', 'Quiz en Vivo'),     
+    )
+    quiz_type = models.CharField(
+        max_length=10, 
+        choices=QUIZ_TYPE_CHOICES, 
+        default='LESSON'
+    )
+    
+    # Un Quiz de Lección pertenece a un Módulo (Ahora es opcional)
     module = models.OneToOneField(
         Module,
         on_delete=models.CASCADE,
-        related_name='quiz' # Permite a Module encontrar su Examen
+        related_name='quiz',
+        null=True, # <-- ¡Esto permite que el campo esté vacío para Quizzes en Vivo!
+        blank=True 
     )
+    
+    # Un Quiz en Vivo pertenece a un Curso (en general)
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name='live_quizzes',
+        null=True, 
+        blank=True 
+    )
+
+    # --- ¡IMPORTANTE: ELIMINA EL BLOQUE DE CÓDIGO QUE ESTABA AQUÍ! ---
+    # (Aquí tenías repetido 'module = models.OneToOneField...' sin null=True)
+
     title = models.CharField(max_length=200)
     due_date = models.DateTimeField(
         null=True, 
@@ -293,7 +319,10 @@ class Quiz(models.Model):
     )
 
     def __str__(self):
-        return f'Examen del {self.module.title}'
+        # Ajustamos el __str__ para que no falle si no hay módulo
+        if self.module:
+            return f'Examen del {self.module.title}'
+        return f'Quiz en Vivo: {self.title}'
 
 # ====================================================================
 # 11. NUEVO MODELO: Pregunta (Question)
