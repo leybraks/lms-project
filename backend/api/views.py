@@ -5,17 +5,23 @@ from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
-from .permissions import IsEnrolledPermission
+from .permissions import IsEnrolledPermission, IsEnrolledOrProfessor
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.db.models import Max, Count
-from django.utils import timezone
-from rest_framework.exceptions import PermissionDenied
+from datetime import datetime, timezone as dt_timezone
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
+from django.utils import timezone # <-- ¡ASEGÚRATE DE IMPORTAR TIMEZONE!
+from django.db.models import OuterRef, Subquery, Exists, Value
+from django.db.models.functions import Coalesce
+from django.core.exceptions import PermissionDenied
+import requests
+from rest_framework.pagination import PageNumberPagination
 # Imports de Modelos y Serializers de tu app
-from .models import Course, Enrollment, Lesson, LessonCompletion, Assignment, Submission, Quiz, User,Conversation, Message,LessonNote
-from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer, AssignmentSerializer, SubmissionSerializer, QuizSerializer,ConversationListSerializer,MessageSerializer, MessageCreateSerializer, LessonNoteSerializer, GradedItemSerializer
+from .models import Course, Enrollment, Lesson, LessonCompletion, Assignment, Submission, Quiz, User,Conversation, Message,LessonNote,ReadReceipt
+from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer, AssignmentSerializer, SubmissionSerializer, QuizSerializer,ConversationListSerializer,MessageSerializer, MessageCreateSerializer, LessonNoteSerializer, GradedItemSerializer,ReadReceiptSerializer,StudentListSerializer
+
 # ====================================================================
 # 1. Vistas de Cursos
 # ====================================================================
@@ -142,7 +148,7 @@ class LessonDetailView(generics.RetrieveAPIView):
     serializer_class = LessonSerializer
     # ¡APLICAMOS EL NUEVO PERMISO!
     # El usuario debe estar autenticado Y TAMBIÉN inscrito
-    permission_classes = [IsAuthenticated, IsEnrolledPermission]
+    permission_classes = [IsEnrolledOrProfessor]
 
 
     # ====================================================================
@@ -435,19 +441,26 @@ class GroupChatListView(generics.ListAPIView):
 # ====================================================================
 # ACTUALIZADO: Lista/Creación de Mensajes (Chat Activo)
 # ====================================================================
+
+class MessagePagination(PageNumberPagination):
+    page_size = 30
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
 class MessageListView(generics.ListCreateAPIView):
     """
-    GET: Devuelve todos los mensajes de una conversación específica.
+    GET: Devuelve todos los mensajes de una conversación específica (¡AHORA PAGINADO!)
     POST: Crea un nuevo mensaje Y LO RETRANSMITE POR WEBSOCKET.
     """
     permission_classes = [IsAuthenticated]
-
+    
+    # --- ¡CAMBIO 1: AÑADIDO! ---
+    pagination_class = MessagePagination
+    
+    # --- (El resto de tus métodos) ---
     def get_conversation(self):
-        """ Helper para obtener y validar la conversación """
         conversation_id = self.kwargs['conversation_id']
         conversation = get_object_or_404(Conversation, id=conversation_id)
-
-        # Comprueba que el usuario sea participante
         if not self.request.user in conversation.participants.all():
             raise PermissionDenied("No tienes permiso para ver esta conversación.")
         return conversation
@@ -459,18 +472,42 @@ class MessageListView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         conversation = self.get_conversation()
-        return conversation.messages.all().order_by('timestamp')
+        # Mantenemos el orden ASC (timestamp)
+        # Page 1 = Más antiguos, Last Page = Más nuevos
+        return conversation.messages.all().order_by('-timestamp')
+
+    # --- ¡CAMBIO 2: MÉTODO 'list' ACTUALIZADO! ---
+    # (Reemplaza el 'list' que te di antes por este)
+    def list(self, request, *args, **kwargs):
+        """
+        Sobrescribe el método 'list' (GET) para:
+        1. Pasar el contexto al serializer (para arreglar URLs de archivos)
+        2. Manejar la paginación
+        """
+        queryset = self.filter_queryset(self.get_queryset())
+
+        # Paginar el queryset
+        page = self.paginate_queryset(queryset)
+        
+        if page is not None:
+            # ¡LA LÍNEA CLAVE! Pasamos el contexto al serializador
+            serializer = self.get_serializer(page, many=True, context=self.get_serializer_context())
+            # Devolvemos la respuesta paginada (con count, next, etc.)
+            return self.get_paginated_response(serializer.data)
+
+        # Fallback (si no hay paginación)
+        serializer = self.get_serializer(queryset, many=True, context=self.get_serializer_context())
+        return Response(serializer.data)
+    # --- FIN DE LOS CAMBIOS ---
 
     def perform_create(self, serializer):
         conversation = self.get_conversation()
         file_name = None
         file_size = None
-
         if 'file_upload' in self.request.FILES:
             file = self.request.FILES['file_upload']
             file_name = file.name
             file_size = file.size
-
         serializer.save(
             sender=self.request.user, 
             conversation=conversation,
@@ -479,41 +516,26 @@ class MessageListView(generics.ListCreateAPIView):
         )
 
     def create(self, request, *args, **kwargs):
-        # 1. Usar el serializer de CREACIÓN para validar la data de entrada
+        # ... (Tu método 'create' está perfecto, no necesita cambios)
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
-        # 2. Guardar el objeto (perform_create se llamará automáticamente)
         self.perform_create(serializer)
-
-        # 3. Usar el serializer de LECTURA (completo) para la respuesta
         read_serializer = MessageSerializer(serializer.instance, context=self.get_serializer_context())
-
-        # --- ¡INICIO DE CÓDIGO NUEVO PARA WEBSOCKET! ---
         try:
-            # 4. Obtener el Channel Layer
             channel_layer = get_channel_layer()
-
-            # 5. Definir el nombre del grupo (debe coincidir con el Consumer)
             room_group_name = f'chat_conversation_{serializer.instance.conversation.id}'
-
-            # 6. Enviar el mensaje al grupo
             async_to_sync(channel_layer.group_send)(
                 room_group_name,
                 {
-                    'type': 'chat_message', # Llama al método 'chat_message'
-                    'message': read_serializer.data # ¡Enviamos el mensaje serializado!
+                    'type': 'chat_message', 
+                    'message': read_serializer.data
                 }
             )
             print(f"[Views] Mensaje {serializer.instance.id} retransmitido a {room_group_name}")
         except Exception as e:
-            # Si Redis falla, al menos que no se rompa la vista HTTP
             print(f"ERROR: No se pudo retransmitir el mensaje por WebSocket. {e}")
-        # --- ¡FIN DE CÓDIGO NUEVO PARA WEBSOCKET! ---
-
         headers = self.get_success_headers(read_serializer.data)
         return Response(read_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-
 # ====================================================================
 # NUEVA VISTA: Lista de "Contactos" (Compañeros y Profesores)
 # ====================================================================
@@ -662,14 +684,46 @@ class GroupChatListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Devuelve solo las conversaciones que son de GRUPO
-        return self.request.user.conversations.filter(
-            is_group=True
-        ).annotate(
-            last_message_time=Max('messages__timestamp')
-        ).order_by('-last_message_time')
+        user = self.request.user
 
-# --- ¡¡AÑADE ESTA NUEVA CLASE AQUÍ!! ---
+        # Subquery base para el último mensaje
+        last_message_subquery = Message.objects.filter(
+            conversation=OuterRef('pk')
+        ).order_by('-timestamp')
+
+        last_read_subquery = ReadReceipt.objects.filter(
+            conversation=OuterRef('pk'),
+            user=user
+        ).values('last_read_timestamp')[:1]
+
+        return user.conversations.filter(
+            is_group=True,
+            lesson_chat__isnull=True
+        ).annotate(
+            last_read_time=Subquery(last_read_subquery),
+
+            # --- ¡INICIO DE LA CORRECCIÓN! ---
+            # Anotamos todos los campos que necesitamos para el snippet
+            last_msg_content=Subquery(last_message_subquery.values('content')[:1]),
+            last_msg_type=Subquery(last_message_subquery.values('message_type')[:1]),
+            last_msg_file_name=Subquery(last_message_subquery.values('file_name')[:1]),
+            last_msg_timestamp=Subquery(last_message_subquery.values('timestamp')[:1])
+            # --- FIN DE LA CORRECCIÓN! ---
+
+        ).annotate(
+            unread_count=Count('messages', filter=
+                Q(messages__timestamp__gt=Coalesce(
+                    'last_read_time',
+                    datetime.min.replace(tzinfo=dt_timezone.utc)
+                )) & 
+                ~Q(messages__sender=user)
+            )
+        ).order_by(
+            Coalesce('last_msg_timestamp', datetime.min.replace(tzinfo=dt_timezone.utc)).desc()
+        )
+    def get_serializer_context(self):
+        return {'request': self.request}
+
 class DirectMessageListView(generics.ListAPIView):
     """
     Devuelve todos los chats 1-a-1 (no grupales)
@@ -679,10 +733,248 @@ class DirectMessageListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Devuelve solo las conversaciones que NO son de GRUPO
-        return self.request.user.conversations.filter(
+        user = self.request.user
+
+        last_message_subquery = Message.objects.filter(
+            conversation=OuterRef('pk')
+        ).order_by('-timestamp')
+
+        last_read_subquery = ReadReceipt.objects.filter(
+            conversation=OuterRef('pk'),
+            user=user
+        ).values('last_read_timestamp')[:1]
+
+        return user.conversations.filter(
             is_group=False
         ).annotate(
-            last_message_time=Max('messages__timestamp')
-        ).order_by('-last_message_time')
-# --- FIN DE LA NUEVA CLASE ---
+            last_read_time=Subquery(last_read_subquery),
+
+            # --- ¡INICIO DE LA CORRECCIÓN! ---
+            last_msg_content=Subquery(last_message_subquery.values('content')[:1]),
+            last_msg_type=Subquery(last_message_subquery.values('message_type')[:1]),
+            last_msg_file_name=Subquery(last_message_subquery.values('file_name')[:1]),
+            last_msg_timestamp=Subquery(last_message_subquery.values('timestamp')[:1])
+            # --- FIN DE LA CORRECCIÓN! ---
+
+        ).annotate(
+            unread_count=Count('messages', filter=
+                Q(messages__timestamp__gt=Coalesce(
+                    'last_read_time',
+                    datetime.min.replace(tzinfo=dt_timezone.utc)
+                )) & 
+                ~Q(messages__sender=user)
+            )
+        ).order_by(
+            Coalesce('last_msg_timestamp', datetime.min.replace(tzinfo=dt_timezone.utc)).desc()
+        )
+    
+    def get_serializer_context(self):
+        # Este método es importante para que el serializer
+        # pueda acceder al 'request.user'
+        return {'request': self.request}
+
+class MarkAsReadView(APIView):
+    """
+    Actualiza el ReadReceipt de un usuario para una conversación.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, conversation_id, *args, **kwargs):
+        user = request.user
+        conversation = get_object_or_404(Conversation, id=conversation_id)
+        
+        # Comprueba que el usuario sea participante
+        if not conversation.participants.filter(id=user.id).exists():
+            raise PermissionDenied("No eres participante de esta conversación.")
+            
+        # Actualiza o crea el recibo de lectura a la hora actual
+        ReadReceipt.objects.update_or_create(
+            user=user, 
+            conversation=conversation,
+            defaults={'last_read_timestamp': timezone.now()}
+        )
+        
+        return Response(status=status.HTTP_200_OK)
+    
+
+class LessonChatListView(generics.ListAPIView):
+    """
+    Devuelve todos los chats grupales de LECCIONES
+    en los que el usuario actual participa.
+    """
+    serializer_class = ConversationListSerializer 
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+
+        last_message_subquery = Message.objects.filter(
+            conversation=OuterRef('pk')
+        ).order_by('-timestamp')
+
+        last_read_subquery = ReadReceipt.objects.filter(
+            conversation=OuterRef('pk'),
+            user=user
+        ).values('last_read_timestamp')[:1]
+
+        queryset = user.conversations.filter(
+            is_group=True,
+            lesson_chat__isnull=False
+        )
+
+        course_id = self.request.query_params.get('course_id')
+        if course_id:
+            queryset = queryset.filter(lesson_chat__module__course_id=course_id)
+
+        module_id = self.request.query_params.get('module_id')
+        if module_id:
+            queryset = queryset.filter(lesson_chat__module_id=module_id)
+
+        return queryset.annotate(
+            last_read_time=Subquery(last_read_subquery),
+
+            # --- ¡INICIO DE LA CORRECCIÓN! ---
+            last_msg_content=Subquery(last_message_subquery.values('content')[:1]),
+            last_msg_type=Subquery(last_message_subquery.values('message_type')[:1]),
+            last_msg_file_name=Subquery(last_message_subquery.values('file_name')[:1]),
+            last_msg_timestamp=Subquery(last_message_subquery.values('timestamp')[:1])
+            # --- FIN DE LA CORRECCIÓN! ---
+
+        ).annotate(
+            unread_count=Count('messages', filter=
+                Q(messages__timestamp__gt=Coalesce(
+                    'last_read_time',
+                    datetime.min.replace(tzinfo=dt_timezone.utc)
+                )) & 
+                ~Q(messages__sender=user)
+            )
+        ).order_by(
+            Coalesce('last_msg_timestamp', datetime.min.replace(tzinfo=dt_timezone.utc)).desc()
+        )
+
+    def get_serializer_context(self):
+        return {'request': self.request}
+    
+
+class ReadReceiptListView(generics.ListAPIView):
+    serializer_class = ReadReceiptSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        conversation_id = self.kwargs.get('conversation_id')
+        conversation = get_object_or_404(Conversation, id=conversation_id)
+
+        if not conversation.participants.filter(id=self.request.user.id).exists():
+            raise PermissionDenied("No eres parte de esta conversación.")
+
+        # Devuelve todos los recibos, EXCEPTO el del propio usuario
+        return conversation.read_receipts.exclude(user=self.request.user).select_related('user')
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated]) # Deberías crear un permiso IsProfessor
+def get_course_students(request, course_id):
+    """
+    Devuelve la lista de alumnos inscritos en un curso.
+    """
+    if not request.user.role == 'PROFESSOR':
+        return Response({'error': 'No tienes permiso'}, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        # Usamos tus modelos: Enrollment y User
+        enrollments = Enrollment.objects.filter(
+            course_id=course_id, 
+            user__role='STUDENT'
+        ).select_related('user') # Optimiza la consulta
+        
+        students = [enroll.user for enroll in enrollments]
+        serializer = StudentListSerializer(students, many=True)
+        return Response(serializer.data)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated]) # Deberías crear un permiso IsProfessor
+def add_experience_points(request, user_id):
+    """
+    Otorga puntos de experiencia (XP) a un alumno específico.
+    ¡AHORA USA DJANGO CHANNELS PARA NOTIFICAR!
+    """
+    if not request.user.role == 'PROFESSOR':
+        return Response({'error': 'No tienes permiso para dar puntos'}, status=403)
+    
+    try:
+        # 1. ACTUALIZA LA BASE DE DATOS (DJANGO)
+        student = User.objects.get(id=user_id, role='STUDENT')
+        points_to_add = int(request.data.get('points', 0))
+
+        if points_to_add == 0:
+            return Response({'error': 'No se especificaron puntos'}, status=400)
+
+        student.experience_points += points_to_add
+        student.save(update_fields=['experience_points'])
+
+        # 2. NOTIFICA AL ALUMNO (¡Usando Channels!)
+        try:
+            channel_layer = get_channel_layer()
+            
+            # Este es el "canal" privado de notificaciones del alumno
+            user_channel_name = f"user_{student.id}_notifications" 
+            
+            async_to_sync(channel_layer.group_send)(
+                user_channel_name,
+                {
+                    "type": "xp_update_message", # ¡Nuevo tipo de mensaje!
+                    "payload": {
+                        'newXp': student.experience_points,
+                        'pointsAdded': points_to_add
+                    }
+                }
+            )
+            print(f"[Django View] Notificación de XP enviada a {user_channel_name}")
+            
+        except Exception as e:
+            # Si Channels falla, no rompemos la app, solo lo registramos
+            print(f"ADVERTENCIA: No se pudo notificar por Channels. Error: {e}")
+            pass 
+
+        # 3. RESPONDE AL TUTOR (REACT)
+        return Response({
+            'status': 'ok',
+            'user_id': student.id,
+            'new_total_xp': student.experience_points
+        })
+
+    except User.DoesNotExist:
+        return Response({'error': 'Alumno no encontrado'}, status=404)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated]) # Deberías crear un permiso IsProfessor
+def get_course_quizzes(request, course_id):
+    """
+    Devuelve una lista de todos los Quizzes asociados a un curso,
+    para que el tutor pueda seleccionar uno para lanzar en vivo.
+    """
+    if not request.user.role == 'PROFESSOR':
+        return Response({'error': 'No tienes permiso'}, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        # Busca todos los quizzes cuyos módulos pertenezcan al curso_id
+        quizzes = Quiz.objects.filter(module__course_id=course_id)
+        
+        # Usamos tu QuizSerializer (que ya existe)
+        serializer = QuizSerializer(quizzes, many=True)
+        return Response(serializer.data)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+
+
+
+
+
+

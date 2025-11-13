@@ -27,7 +27,13 @@ from .views import (
     LessonNoteViewSet,
     GradebookView,
     DirectMessageListView,
+    LessonChatListView,
+    MarkAsReadView,
+    ReadReceiptListView,
+    get_course_students,     # <-- ¡NUEVA!
+    add_experience_points,
     get_dashboard_stats,
+    get_course_quizzes,
     get_me_view # Importamos esta también, ya que existe en views.py
 ) 
 
@@ -71,6 +77,13 @@ urlpatterns = [
     path('inbox/dm_chats/', DirectMessageListView.as_view(), name='dm-chat-list'),
     path('courses/all/', ListaDeCursosView.as_view(), name='course-list-all'),
     path('courses/<int:course_id>/grades/', GradebookView.as_view(), name='gradebook-list'),
+    path('inbox/lesson_chats/', LessonChatListView.as_view(), name='lesson-chat-list'),
+    path('inbox/conversations/<int:conversation_id>/mark_as_read/', MarkAsReadView.as_view(), name='mark-as-read'),
+    path('inbox/conversations/<int:conversation_id>/read_receipts/', ReadReceiptListView.as_view(), name='read-receipt-list'),
+    path('course/<int:course_id>/students/', get_course_students, name='get_course_students'),
+    path('users/<int:user_id>/add-xp/', add_experience_points, name='add_experience_points'),
+    path('course/<int:course_id>/quizzes/', get_course_quizzes, name='get_course_quizzes'), 
+    
     path('', include(router.urls)),
 ]
 if settings.DEBUG:

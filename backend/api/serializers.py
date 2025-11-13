@@ -20,7 +20,9 @@ from .models import (
     CourseBenefit,
     Conversation,
     Message,
-    LessonNote
+    LessonNote,
+    ReadReceipt
+    
 )
 
 class LearningObjectiveSerializer(serializers.ModelSerializer):
@@ -49,7 +51,7 @@ class ResourceSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'role','title', 'bio']
+        fields = ['id', 'username', 'email', 'role','title', 'bio','experience_points']
 
 # 2. Serializer de Lección (El más interno)
 class LessonSerializer(serializers.ModelSerializer):
@@ -306,20 +308,39 @@ class QuizSerializer(serializers.ModelSerializer):
 class MessageSerializer(serializers.ModelSerializer):
     """
     Muestra un mensaje, anidando la información del remitente.
-    AHORA TAMBIÉN MUESTRA LA URL DEL ARCHIVO.
+    AHORA CONSTRUYE LA URL ABSOLUTA PARA LOS ARCHIVOS.
     """
     sender = UserSerializer(read_only=True) 
     
+    # --- ¡INICIO DE LA CORRECCIÓN! ---
+    
+    # 1. Creamos un nuevo campo de solo lectura para la URL
+    file_upload_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Message
         fields = [
             'id', 'conversation', 'sender', 'message_type', 
             'content', 'language', 
-            'file_upload', 
-            'file_name', # <-- ¡AÑADIDO!
-            'file_size',# <-- ¡NUEVO! Envía la URL del archivo
+            'file_upload_url',  # <-- 2. Usamos el nuevo campo
+            'file_name',
+            'file_size',
             'timestamp'
+            # 'file_upload' (el campo original) ya no es necesario
         ]
+
+    # 3. Añadimos la función que construye la URL
+    def get_file_upload_url(self, obj):
+        if obj.file_upload:
+            request = self.context.get('request')
+            if request:
+                # Construye la URL completa (ej: http://.../media/...)
+                return request.build_absolute_uri(obj.file_upload.url)
+            
+            # Fallback por si no hay request (ej: en un consumer)
+            # Esto seguirá enviando la ruta relativa
+            return obj.file_upload.url
+        return None
 # ====================================================================
 # ACTUALIZADO: Serializer de Creación de Mensaje (para escribir)
 # ====================================================================
@@ -343,71 +364,60 @@ class MessageCreateSerializer(serializers.ModelSerializer):
             'language': {'required': False, 'allow_null': True, 'allow_blank': True},
         }
 
+class SimpleMessageSerializer(serializers.ModelSerializer):
+    """Serializer simple solo para el último mensaje"""
+    class Meta:
+        model = Message
+        fields = ['content', 'timestamp']
 # ====================================================================
 # ACTUALIZADO: Serializer de Lista de Conversaciones (para el sidebar)
 # ====================================================================
 class ConversationListSerializer(serializers.ModelSerializer):
-    """
-    Muestra una conversación en la lista del inbox.
-    Incluye participantes y un snippet del último mensaje.
-    """
     participants = UserSerializer(many=True, read_only=True)
-    
+
+    # Leemos los campos anotados por la vista (agregados con annotate en views)
+    unread_count = serializers.IntegerField(read_only=True)
+    last_msg_content = serializers.CharField(read_only=True, default=None, required=False, allow_null=True)
+    last_msg_type = serializers.CharField(read_only=True, default=None, required=False, allow_null=True)
+    last_msg_file_name = serializers.CharField(read_only=True, default=None, required=False, allow_null=True)
+    last_message_timestamp = serializers.DateTimeField(read_only=True, source='last_msg_timestamp', required=False, allow_null=True)
+
+    # --- Campo calculado que React usa para mostrar el resumen del último mensaje ---
     last_message_snippet = serializers.SerializerMethodField()
-    last_message_time = serializers.SerializerMethodField()
 
     class Meta:
         model = Conversation
         fields = [
-            'id', 'name', 'is_group', 'participants', 
-            'last_message_snippet', 'last_message_time'
+            'id',
+            'name',
+            'is_group',
+            'participants',
+            'unread_count',
+            'last_msg_content',       # ✅ agregado
+            'last_msg_type',          # ✅ agregado
+            'last_msg_file_name',
+            'last_message_timestamp',
+            'last_message_snippet',   # ✅ lo mantenemos
         ]
 
-    def get_last_message_object(self, obj):
-        # Pequeña optimización para no consultar la BD dos veces
-        if not hasattr(self, '_last_message_cache'):
-            self._last_message_cache = {}
-        
-        if obj.id not in self._last_message_cache:
-            self._last_message_cache[obj.id] = obj.messages.order_by('-timestamp').first()
-        return self._last_message_cache[obj.id]
-
+    # --- Método que construye el snippet, igual que en React ---
     def get_last_message_snippet(self, obj):
-        """ 
-        Devuelve un snippet del último mensaje,
-        AHORA MANEJA LOS TIPOS DE MENSAJE.
-        """
-        last_msg = self.get_last_message_object(obj)
-        
-        if not last_msg:
-            return "Aún no hay mensajes."
-        
-        # --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
-        # 1. Revisa primero los tipos que no tienen 'content'
-        if last_msg.message_type == 'IMAGE':
-            return "[Imagen]"
-        if last_msg.message_type == 'FILE':
-            return "[Archivo Adjunto]"
-        if last_msg.message_type == 'CODE':
-            return "[Bloque de Código]"
+        content = getattr(obj, 'last_msg_content', None)
+        msg_type = getattr(obj, 'last_msg_type', 'TEXT')
+        file_name = getattr(obj, 'last_msg_file_name', None)
 
-        # 2. Si es 'TEXT', asegúrate de que 'content' no sea None
-        if last_msg.content:
-            return last_msg.content[:50]
-            
-        # 3. Si es 'TEXT' pero el content es None (ej. un archivo con texto)
-        #    le damos prioridad al archivo (esto es un fallback)
-        if last_msg.file_upload:
-            return "[Archivo Adjunto]"
-            
-        return "..." # Fallback final
+        if content:
+            return content
 
-    def get_last_message_time(self, obj):
-        """ Devuelve el timestamp del último mensaje. """
-        last_msg = self.get_last_message_object(obj)
-        if not last_msg:
-            return obj.created_at
-        return last_msg.timestamp
+        if msg_type == 'CODE':
+            return 'Código compartido'
+        if msg_type == 'IMAGE':
+            return 'Imagen'
+        if msg_type == 'FILE':
+            return file_name or 'Archivo'
+
+        return "Sin mensajes"
+
     
 # ====================================================================
 # NUEVO: Serializer de Apuntes de Lección
@@ -428,7 +438,9 @@ class GradeSerializer(serializers.ModelSerializer):
         model = Grade
         fields = ['score', 'comments', 'graded_at']
 
-class GradedItemSerializer(serializers.ModelSerializer):
+
+
+class GradedItemSerializer(serializers.ModelSerializer):  
     """
     Serializer para una Tarea (Assignment).
     Muestra la entrega (Submission) y la nota (Grade) del usuario actual.
@@ -462,3 +474,35 @@ class GradedItemSerializer(serializers.ModelSerializer):
             }
         except Submission.DoesNotExist:
             return None # El usuario no ha entregado esta tarea
+        
+
+class ReadReceiptSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    class Meta:
+        model = ReadReceipt
+        fields = ['user', 'last_read_timestamp']
+
+
+class StudentListSerializer(serializers.ModelSerializer):
+    """
+    Serializer simple para la lista de 'Participantes' del tutor.
+    Muestra solo lo esencial + los puntos de experiencia.
+    """
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'first_name', 'last_name', 'experience_points']
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

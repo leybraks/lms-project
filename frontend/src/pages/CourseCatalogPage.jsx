@@ -3,8 +3,9 @@ import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import axiosInstance from '../api/axios';
 import { useTheme } from '@mui/material/styles';
 import { motion } from "framer-motion";
+import { useAuth } from '../context/AuthContext'; 
 
-// --- NUEVOS Componentes MUI para UX ---
+// --- Componentes MUI ---
 import {
   Box,
   Typography,
@@ -20,43 +21,43 @@ import {
   Link,
   TextField,
   InputAdornment,
-  Container, // Usaremos Container para centrar
-  Tabs,       // <-- Pestañas
-  Tab,        // <-- Pestaña
-  Paper,      // <-- Contenedor de controles
-  Select,     // <-- Menú para Ordenar
-  MenuItem,   // <-- Opción del Menú
+  Container, 
+  Tabs,       
+  Tab,        
+  Paper,      
+  Select,     
+  MenuItem,   
   FormControl,
   InputLabel,
-  Button,     // <-- Botón de Filtros
-  Drawer,     // <-- Panel de Filtros
-  IconButton, // <-- Botón para cerrar Drawer
+  Button,     
+  Drawer,     
+  IconButton, 
   List,
   ListItem,
   ListItemText,
-  Checkbox,   // <-- Checkbox de Filtro
-  Rating,     // <-- Filtro de Estrellas
-  LinearProgress, // <-- Progreso del Curso
+  Checkbox,   
+  Rating,     
+  LinearProgress, 
   FormGroup,
   FormControlLabel
 } from '@mui/material';
 
-// --- NUEVOS Iconos ---
+// --- Iconos ---
 import AutoStoriesIcon from '@mui/icons-material/AutoStories';
 import SearchIcon from '@mui/icons-material/Search';
-import FilterListIcon from '@mui/icons-material/FilterList'; // <-- Icono de Filtros
+import FilterListIcon from '@mui/icons-material/FilterList'; 
 import CloseIcon from '@mui/icons-material/Close';
-import SchoolIcon from '@mui/icons-material/School'; // Icono para Hero
+import SchoolIcon from '@mui/icons-material/School'; 
+import PeopleAltIcon from '@mui/icons-material/PeopleAlt'; 
+// El icono 'AddIcon' ya no es necesario aquí
+// import AddIcon from '@mui/icons-material/Add'; 
 
 // === VARIANTES DE ANIMACIÓN (Sin cambios) ===
-// === VARIANTES DE ANIMACIÓN (¡Con "Bounce"!) ===
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
     transition: { 
-      // Damos un poco más de tiempo entre elementos
-      // para que el rebote de cada uno sea más notorio.
       staggerChildren: 0.1 
     }
   }
@@ -65,16 +66,15 @@ const containerVariants = {
 const itemVariants = {
   hidden: { 
     opacity: 0, 
-    y: 50 // Empezamos un poco más abajo (50) para que el "salto" sea más visible
+    y: 50 
   },
   visible: { 
     opacity: 1, 
     y: 0,
     transition: {
-      // ¡AQUÍ ESTÁ LA MAGIA!
-      type: "spring", // Usamos una física de resorte
-      bounce: 0.4,    // Nivel de rebote (0 = nada, 1 = mucho)
-      duration: 0.8   // Duración de la animación
+      type: "spring", 
+      bounce: 0.4,    
+      duration: 0.8   
     }
   }
 };
@@ -94,9 +94,8 @@ const getScrollbarStyles = (theme) => ({
   '&::-webkit-scrollbar-thumb:hover': { backgroundColor: theme.palette.primary.dark }
 });
 
-// === NUEVO: Componente Tarjeta de Curso (Mejorado) ===
-// Ahora acepta una prop 'progress' para mostrar la barra de progreso
-const CourseCard = ({ course, progress }) => {
+// === Componente Tarjeta de Curso (Sin cambios, ya muestra stats a profesor) ===
+const CourseCard = ({ course, progress, isOwner = false, enrollmentsCount = 0 }) => {
   const theme = useTheme();
   
   return (
@@ -138,14 +137,12 @@ const CourseCard = ({ course, progress }) => {
                 {course.title}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ minHeight: '40px' }}>
-                {/* Truncamos la descripción para que no ocupe mucho */}
                 {course.description.substring(0, 100)}{course.description.length > 100 ? '...' : ''}
               </Typography>
             </CardContent>
             
-            {/* --- NUEVO: Barra de Progreso --- */}
-            {/* Solo se muestra si pasamos la prop 'progress' (para "Mis Cursos") */}
-            {progress !== undefined && (
+            {/* --- Barra de Progreso (Solo Estudiantes) --- */}
+            {progress !== undefined && !isOwner && (
               <Box sx={{ px: 2, py: 1 }}>
                 <Typography variant="caption" color="text.secondary">
                   Progreso: {progress}%
@@ -162,17 +159,29 @@ const CourseCard = ({ course, progress }) => {
             <Box sx={{ p: 2, pt: 1, width: '100%' }}>
               <Divider sx={{ mb: 2 }} />
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                {course.professor && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-                    <Avatar 
-                      sx={{ width: 28, height: 28, fontSize: '0.8rem' }}
-                      src={`https://placehold.co/50/FF5733/FFFFFF?text=${course.professor.username[0]}`}
-                    />
-                    <Typography variant="caption" color="text.secondary" noWrap>
-                      {course.professor.username}
+                
+                {/* Lógica: Stats para dueño (Profesor), Avatar para otros */}
+                {isOwner ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, color: 'text.secondary' }}>
+                    <PeopleAltIcon fontSize="small" />
+                    <Typography variant="caption" noWrap>
+                      {enrollmentsCount} Estudiante{enrollmentsCount !== 1 ? 's' : ''}
                     </Typography>
                   </Box>
+                ) : (
+                  course.professor && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                      <Avatar 
+                        sx={{ width: 28, height: 28, fontSize: '0.8rem' }}
+                        src={`https://placehold.co/50/FF5733/FFFFFF?text=${course.professor.username[0]}`}
+                      />
+                      <Typography variant="caption" color="text.secondary" noWrap>
+                        {course.professor.username}
+                      </Typography>
+                    </Box>
+                  )
                 )}
+
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary', flexShrink: 0, ml: 1 }}>
                   <AutoStoriesIcon fontSize="small" />
                   <Typography variant="caption">{course.modules_count} Módulos</Typography>
@@ -186,7 +195,7 @@ const CourseCard = ({ course, progress }) => {
   );
 };
 
-// === NUEVO: Panel de Pestañas (Helper) ===
+// === Panel de Pestañas (Helper) ===
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
   return (
@@ -209,6 +218,10 @@ function TabPanel(props) {
 // === PÁGINA PRINCIPAL ===
 function CourseCatalogPage() {
   const theme = useTheme(); 
+  const { user } = useAuth(); 
+  
+  console.log("DATOS DE USUARIO EN CATALOGO:", user);
+  const navigate = useNavigate(); // Sigue siendo útil para CardActionArea
   
   // --- Estados de Datos (Sin cambios) ---
   const [myCourses, setMyCourses] = useState([]);
@@ -216,77 +229,75 @@ function CourseCatalogPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // --- NUEVOS ESTADOS DE UX ---
-  const [activeTab, setActiveTab] = useState(0); // 0 = Mis Cursos, 1 = Explorar
+  // --- Estados de UX (Sin cambios) ---
+  const [activeTab, setActiveTab] = useState(0); 
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortBy, setSortBy] = useState("popular"); // 'popular', 'newest', 'rating'
+  const [sortBy, setSortBy] = useState("popular"); 
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   
-  // Estados para los filtros (visuales por ahora)
+  // Estados para los filtros (Sin cambios)
   const [filterCategories, setFilterCategories] = useState([]);
   const [filterDifficulty, setFilterDifficulty] = useState([]);
   const [filterRating, setFilterRating] = useState(0);
 
-  // --- Lógica de Carga (Sin cambios) ---
-// frontend/src/pages/CourseCatalogPage.jsx
-
-  // --- Lógica de Carga (¡ACTUALIZADA!) ---
+  // --- Lógica de Carga (Sin cambios, ya funciona) ---
   useEffect(() => {
+    if (!user) {
+      setLoading(true); 
+      return;
+    }
+
     const fetchCourses = async () => {
       try {
         setLoading(true);
         setError(null);
         
-        const [coursesResponse, enrollmentsResponse] = await Promise.all([
-          axiosInstance.get('/api/courses/all/'),
-          axiosInstance.get('/api/enrollments/my_enrollments/')
-        ]);
-        
+        const coursesResponse = await axiosInstance.get('/api/courses/all/');
         const allCourses = coursesResponse.data;
-        const enrollments = enrollmentsResponse.data;
-        
-        // --- ¡NUEVA LÓGICA DE PROGRESO! ---
-        
-        // 1. Crear un Mapa de Progreso desde las inscripciones
-        //    (Esto es mucho más rápido que buscar en el array cada vez)
-        //    Ej: progressMap = { 1: { completed: 5, total: 10 }, 3: { completed: 1, total: 8 } }
-        const progressMap = {};
-        for (const enrollment of enrollments) {
-          progressMap[enrollment.course.id] = {
-            completed: enrollment.lessons_completed_count,
-            total: enrollment.total_lessons_count
-          };
-        }
 
-        // 2. Crear un Set de IDs (como ya lo tenías)
-        const enrolledCourseIds = new Set(enrollments.map(e => e.course.id));
-        
-        // 3. Construir "Mis Cursos" USANDO el Mapa de Progreso
-        const myCoursesFullData = allCourses
-          .filter(course => enrolledCourseIds.has(course.id))
-          .map(course => {
-            const progressData = progressMap[course.id];
-            let progressPercent = 0;
-            
-            // Calcular el porcentaje (evitando división por cero)
-            if (progressData && progressData.total > 0) {
-              progressPercent = Math.round((progressData.completed / progressData.total) * 100);
-            }
-            
-            return {
-              ...course,
-              progress: progressPercent // <-- ¡DATO REAL!
-            };
-          });
+        if (user.role === 'PROFESSOR') {
+          // --- VISTA DE PROFESOR ---
+          const taughtCourses = allCourses.filter(course => course.professor.username === user.username);
+          const otherCourses = allCourses.filter(course => course.professor.username !== user.username);
           
-        const availableCourses = allCourses.filter(course => !enrolledCourseIds.has(course.id));
-        
-        setMyCourses(myCoursesFullData);
-        setExploreCourses(availableCourses);
+          setMyCourses(taughtCourses);
+          setExploreCourses(otherCourses);
+          setActiveTab(0); 
+          
+        } else {
+          // --- VISTA DE ALUMNO ---
+          const enrollmentsResponse = await axiosInstance.get('/api/enrollments/my_enrollments/');
+          const enrollments = enrollmentsResponse.data;
 
-        // Si el usuario no tiene cursos, llévalo a "Explorar"
-        if (myCoursesFullData.length === 0) {
-          setActiveTab(1);
+          const progressMap = {};
+          for (const enrollment of enrollments) {
+            progressMap[enrollment.course.id] = {
+              completed: enrollment.lessons_completed_count,
+              total: enrollment.total_lessons_count
+            };
+          }
+
+          const enrolledCourseIds = new Set(enrollments.map(e => e.course.id));
+          
+          const myCoursesFullData = allCourses
+            .filter(course => enrolledCourseIds.has(course.id))
+            .map(course => {
+              const progressData = progressMap[course.id];
+              let progressPercent = 0;
+              if (progressData && progressData.total > 0) {
+                progressPercent = Math.round((progressData.completed / progressData.total) * 100);
+              }
+              return { ...course, progress: progressPercent };
+            });
+            
+          const availableCourses = allCourses.filter(course => !enrolledCourseIds.has(course.id));
+          
+          setMyCourses(myCoursesFullData);
+          setExploreCourses(availableCourses);
+
+          if (myCoursesFullData.length === 0) {
+            setActiveTab(1);
+          }
         }
 
       } catch (err) {
@@ -297,48 +308,40 @@ function CourseCatalogPage() {
       }
     };
     fetchCourses();
-  }, []); // El array vacío [] asegura que se ejecute solo una vez
+  }, [user]); 
   
-  // --- Lógica de Filtro (Mejorada con useMemo) ---
-  // Esto recalcula los cursos a mostrar SOLO si las dependencias cambian
+  // --- Lógica de Filtro (Sin cambios) ---
   const coursesToDisplay = useMemo(() => {
     const source = activeTab === 0 ? myCourses : exploreCourses;
     
-    // Por ahora, solo filtramos por búsqueda (searchTerm)
-    // En el futuro, aquí se aplicaría la lógica de filterCategories, filterDifficulty, etc.
     return source.filter(course =>
       course.title.toLowerCase().includes(searchTerm.toLowerCase())
     );
     
-    // La lógica de 'sortBy' también se aplicaría aquí
-    // .sort(...)
-
   }, [activeTab, myCourses, exploreCourses, searchTerm, sortBy, filterCategories, filterDifficulty]);
 
 
-  // --- Handlers de UI ---
+  // --- Handlers de UI (Sin cambios) ---
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
-    setSearchTerm(""); // Resetea la búsqueda al cambiar de pestaña
+    setSearchTerm(""); 
   };
-
   const handleSearchChange = (event) => {
     setSearchTerm(event.target.value);
   };
-  
   const handleSortChange = (event) => {
     setSortBy(event.target.value);
   };
 
   // === RENDERING DE ESTADOS (Sin cambios) ===
-  if (loading) {
+  if (loading || !user) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
   }
   if (error) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><Alert severity="error">{error}</Alert></Box>;
   }
 
-  // === RENDERIZADO PRINCIPAL (Rediseñado) ===
+  // === RENDERIZADO PRINCIPAL ===
   return (
     <Box 
       component={motion.div}
@@ -353,27 +356,15 @@ function CourseCatalogPage() {
       }}
     >
       
-      {/* --- 1. SECCIÓN HERO (Más simple) --- */}
-      {/* --- 1. SECCIÓN HERO (Corregida para estar contenida) --- */}
-      <Box sx={{ 
-        mb: 4, 
-        mt: 4,
-        // Vaciamos el Box exterior. 
-        // Solo da el margen inferior para separar el hero del contenido.
-      }}>
-        
-        {/* === CAMBIO === */}
-        {/* Movimos todos los estilos al Container. */}
-        {/* El Container SÍ respeta el 'maxWidth' y se centra. */}
+      {/* --- 1. SECCIÓN HERO (Sin cambios) --- */}
+      <Box sx={{ mb: 4, mt: 4 }}>
         <Container 
           maxWidth="xl" 
           sx={{ 
-            // --- ESTILOS MOVIDOS AQUÍ ---
-            p: {xs: 4, md: 6}, // <--- Este es tu PADDING INTERNO
-            borderRadius: { xs: 2, md: 4 }, // Tus bordes redondeados
+            p: {xs: 4, md: 6}, 
+            borderRadius: { xs: 2, md: 4 },
             background: `linear-gradient(135deg, ${theme.palette.primary.dark}, ${theme.palette.primary.main})`, 
             color: 'primary.contrastText' 
-            // --- FIN DE ESTILOS MOVIDOS ---
           }}
         >
           <motion.div variants={itemVariants}>
@@ -384,7 +375,7 @@ function CourseCatalogPage() {
               </Typography>
             </Box>
             <Typography variant="h6" component="p" sx={{ opacity: 0.9, fontSize: {xs: '1rem', md: '1.25rem'} }}>
-              Tu viaje de aprendizaje empieza aquí.
+              {user.role === 'PROFESSOR' ? "Gestiona tus cursos asignados y explora otros nuevos." : "Tu viaje de aprendizaje empieza aquí."}
             </Typography>
           </motion.div>
         </Container>
@@ -396,7 +387,7 @@ function CourseCatalogPage() {
         {/* --- PESTAÑAS (Tabs) --- */}
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={activeTab} onChange={handleTabChange} aria-label="pestañas de cursos">
-            <Tab label="Mis Cursos" id="course-tab-0" disabled={myCourses.length === 0} />
+            <Tab label={user.role === 'PROFESSOR' ? "Mis Cursos Asignados" : "Mis Cursos"} id="course-tab-0" disabled={myCourses.length === 0 && user.role !== 'PROFESSOR'} />
             <Tab label="Explorar Cursos" id="course-tab-1" />
           </Tabs>
         </Box>
@@ -412,7 +403,7 @@ function CourseCatalogPage() {
             mt: 3, 
             mb: 3, 
             display: 'flex', 
-            flexWrap: 'wrap', // Permite que se apilen en móvil
+            flexWrap: 'wrap',
             gap: 2, 
             alignItems: 'center',
             borderRadius: 3
@@ -422,16 +413,12 @@ function CourseCatalogPage() {
           <TextField 
             size="small"
             variant="outlined"
-            placeholder={activeTab === 0 ? "Buscar en mis cursos..." : "Buscar todos los cursos..."}
+            placeholder={activeTab === 0 ? (user.role === 'PROFESSOR' ? "Buscar en mis cursos..." : "Buscar en mis cursos...") : "Buscar todos los cursos..."}
             value={searchTerm}
             onChange={handleSearchChange}
-            sx={{ flexGrow: 1, minWidth: '250px' }} // Crece para ocupar espacio
+            sx={{ flexGrow: 1, minWidth: '250px' }} 
             InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
+              startAdornment: ( <InputAdornment position="start"><SearchIcon /></InputAdornment> ),
             }}
           />
           {/* 2. Ordenar Por */}
@@ -458,6 +445,11 @@ function CourseCatalogPage() {
           >
             Filtros
           </Button>
+
+          {/* 4. BOTÓN DE CREAR CURSO (ELIMINADO) ---
+             Ya no hay ningún botón aquí para el profesor.
+          --- */}
+
         </Paper>
 
         {/* --- 3. CONTENIDO DE PESTAÑAS --- */}
@@ -467,13 +459,18 @@ function CourseCatalogPage() {
           <Grid container spacing={3} component={motion.div} variants={containerVariants} initial="hidden" animate="visible">
             {coursesToDisplay.length > 0 ? (
               coursesToDisplay.map((course) => (
-                // Pasamos la prop 'progress'
-                <CourseCard key={course.id} course={course} progress={course.progress} />
+                <CourseCard 
+                  key={course.id} 
+                  course={course} 
+                  progress={user.role === 'STUDENT' ? course.progress : undefined} 
+                  isOwner={user.role === 'PROFESSOR'}
+                  enrollmentsCount={course.enrollments_count || 0} 
+                />
               ))
             ) : (
               <Grid item xs={12}>
                 <Alert severity="info">
-                  {searchTerm ? 'No se encontraron cursos con ese nombre.' : 'No estás inscrito en ningún curso.'}
+                  {searchTerm ? 'No se encontraron cursos con ese nombre.' : (user.role === 'PROFESSOR' ? 'No tienes cursos asignados en este momento.' : 'No estás inscrito en ningún curso.')}
                 </Alert>
               </Grid>
             )}
@@ -485,8 +482,12 @@ function CourseCatalogPage() {
           <Grid container spacing={3} component={motion.div} variants={containerVariants} initial="hidden" animate="visible">
             {coursesToDisplay.length > 0 ? (
               coursesToDisplay.map((course) => (
-                // No pasamos 'progress'
-                <CourseCard key={course.id} course={course} />
+                <CourseCard 
+                  key={course.id} 
+                  course={course} 
+                  isOwner={false} 
+                  enrollmentsCount={course.enrollments_count || 0}
+                />
               ))
             ) : (
               <Grid item xs={12}>
@@ -500,8 +501,7 @@ function CourseCatalogPage() {
 
       </Container>
       
-      {/* --- NUEVO: Panel de Filtros (Drawer) --- */}
-      {/* Este es el panel que se abre al pulsar el botón "Filtros" */}
+      {/* --- Panel de Filtros (Drawer) (Sin cambios) --- */}
       <Drawer
         anchor="right"
         open={isFilterDrawerOpen}
@@ -516,7 +516,6 @@ function CourseCatalogPage() {
           </Box>
           <Divider />
           
-          {/* Grupo de Filtro: Categoría (Mock) */}
           <Box sx={{ my: 2 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Categoría</Typography>
             <FormGroup>
@@ -527,8 +526,6 @@ function CourseCatalogPage() {
             </FormGroup>
           </Box>
           <Divider />
-
-          {/* Grupo de Filtro: Dificultad (Mock) */}
           <Box sx={{ my: 2 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Dificultad</Typography>
             <FormGroup>
@@ -538,8 +535,6 @@ function CourseCatalogPage() {
             </FormGroup>
           </Box>
           <Divider />
-          
-          {/* Grupo de Filtro: Valoración (Mock) */}
           <Box sx={{ my: 2 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Valoración (o más)</Typography>
             <Rating
@@ -549,9 +544,7 @@ function CourseCatalogPage() {
               }}
             />
           </Box>
-          
           <Divider sx={{ my: 2 }} />
-          
           <Button variant="contained" fullWidth sx={{ mb: 1 }}>Aplicar Filtros</Button>
           <Button variant="text" fullWidth>Limpiar todo</Button>
 

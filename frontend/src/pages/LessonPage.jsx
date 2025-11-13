@@ -5,6 +5,7 @@ import { useTheme } from '@mui/material/styles';
 import { motion } from "framer-motion";
 import PetsIcon from '@mui/icons-material/Pets';
 import { JitsiMeeting } from '@jitsi/react-sdk';
+
 import { 
   Box, 
   Typography, 
@@ -34,7 +35,8 @@ import {
   MenuItem, 
   FormControl, 
   InputLabel,
-  LinearProgress // <-- ¡Importado para la Mascota!
+  LinearProgress, // <-- ¡Importado para la Mascota!
+  Modal
 } from '@mui/material';
 
 // --- Iconos ---
@@ -65,7 +67,7 @@ import CodeIcon from '@mui/icons-material/Code';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 
 // --- WebSocket y CodeShare ---
-import useWebSocket from 'react-use-websocket'; 
+import useWebSocket, { ReadyState } from 'react-use-websocket';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'; 
 import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism'; 
 import { useAuth } from '../context/AuthContext'; 
@@ -120,7 +122,8 @@ const getScrollbarStyles = (theme) => ({
 
 // --- Componente de Pestaña ---
 function TabPanel(props) {
-  const { children, value, index, theme, ...other } = props;
+  // 1. Añadimos 'enableScroll' y le damos un valor por defecto de 'true'
+  const { children, value, index, theme, enableScroll = true, ...other } = props;
   return (
     <div
       role="tabpanel"
@@ -136,15 +139,14 @@ function TabPanel(props) {
         height: '100%' 
       }}
     >
-      {value === index && (
-        <Box sx={{ 
-            height: '100%', 
-            overflowY: 'auto', 
-            ...getScrollbarStyles(theme) 
-          }}>
-          {children}
-        </Box>
-      )}
+      <Box sx={{ 
+          height: '100%', 
+          // 2. Hacemos el scroll condicional
+          overflowY: enableScroll ? 'auto' : 'hidden', 
+          ...getScrollbarStyles(theme) 
+        }}>
+        {children}
+      </Box>
     </div>
   );
 }
@@ -211,107 +213,99 @@ const TextBlock = ({ sender, text, time, isStartOfGroup, user }) => {
 };
 
 // --- Componente "Chat de Lección" (Funcional) ---
-const LessonChat = ({ theme, lessonId, conversationId, onNotify }) => {
-  const { user, authTokens } = useAuth(); 
-  const messagesEndRef = useRef(null);
-  const chatContainerRef = useRef(null); // <-- Ref para el contenedor de scroll
+const LessonChat = ({ 
+  theme, 
+  user, 
+  chatHistory, 
+  loadingHistory,
+  setChatHistory, 
+  setLoadingHistory, 
+  readyState, 
+  isSending,
+  onSendJsonMessage, 
+  onNotify, 
+  conversationId,
+  isActive
+}) => {
+  // --- Lógica del Scroll (Corregida) ---
+  const chatContainerRef = useRef(null);
   
-  const [chatHistory, setChatHistory] = useState([]);
-  const [loadingHistory, setLoadingHistory] = useState(true);
   const [tabValue, setTabValue] = useState(0); 
   const [textContent, setTextContent] = useState("");
   const [codeContent, setCodeContent] = useState("");
   const [codeLang, setCodeLang] = useState("python");
-  const [isSending, setIsSending] = useState(false);
 
-  const socketUrl = `ws://127.0.0.1:8000/ws/chat/lesson/${lessonId}/?token=${authTokens?.access}`;
-
-  const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(
-    socketUrl, 
-    {
-      onOpen: () => console.log('WebSocket conectado para Lección', lessonId),
-      onClose: (e) => console.log('WebSocket desconectado:', e.reason),
-      onError: (e) => console.error('WebSocket error:', e),
-      shouldReconnect: (closeEvent) => true, 
-    },
-    !!(authTokens && lessonId) // Solo se conecta si hay token Y lessonId
-  );
-
-  // Cargar Historial
   useEffect(() => {
-    if (!conversationId) {
-      setLoadingHistory(false);
-      return; 
+    // 1. Solo intenta hacer scroll SI la pestaña está activa
+    if (chatContainerRef.current && isActive) {
+      const scrollableNode = chatContainerRef.current;
+      scrollableNode.scrollTop = scrollableNode.scrollHeight;
     }
+  }, [chatHistory, isActive]);
+
+  // --- Lógica de Cargar Historial (Sin cambios) ---
+  useEffect(() => {
     const fetchHistory = async () => {
+      if (!conversationId) {
+        setLoadingHistory(false);
+        setChatHistory([]);
+        return; 
+      }
       try {
         setLoadingHistory(true);
         const response = await axiosInstance.get(`/api/inbox/conversations/${conversationId}/messages/`);
-        setChatHistory(response.data);
+        if (response.data && Array.isArray(response.data.results)) {
+          setChatHistory(response.data.results.reverse());
+        } else if (Array.isArray(response.data)) {
+          setChatHistory(response.data);
+        } else {
+          setChatHistory([]);
+        }
       } catch (err) {
         console.error("Error al cargar historial de chat:", err);
+        setChatHistory([]);
       } finally {
         setLoadingHistory(false);
       }
     };
     fetchHistory();
-  }, [conversationId]);
+  }, [conversationId, setChatHistory, setLoadingHistory]);
 
-  // Recibir Mensajes
-  useEffect(() => {
-    if (lastJsonMessage !== null) {
-      setChatHistory(prev => [...prev, lastJsonMessage.message]);
-    }
-  }, [lastJsonMessage]);
-
-  // Scroll al fondo (Corregido)
-  useEffect(() => {
-    if (chatContainerRef.current) {
-      const scrollElement = chatContainerRef.current;
-      scrollElement.scrollTop = scrollElement.scrollHeight;
-    }
-  }, [chatHistory]); // Se activa cada vez que 'chatHistory' cambia
-
-  // Enviar Mensaje
+  // --- Lógica de Enviar Mensaje (Sin cambios) ---
   const handleChatSubmit = (e) => {
     e.preventDefault();
-    setIsSending(true);
     const isCode = tabValue === 1;
     const content = isCode ? codeContent : textContent;
-
-    if (content.trim() === "" || readyState !== 1) {
-      setIsSending(false);
-      return;
-    }
-    sendJsonMessage({
+    if (content.trim() === "" || readyState !== 1) return;
+    onSendJsonMessage({
       message_type: isCode ? 'CODE' : 'TEXT',
       content: content,
       language: isCode ? codeLang : null
     });
     if (isCode) setCodeContent("");
     else setTextContent("");
-    setIsSending(false);
   };
 
   return (
     <Box sx={{height: '100%', display: 'flex', flexDirection: 'column'}}>
-      <Box
-        ref={chatContainerRef} // <-- Añadido el Ref
+      {/* Lista de Mensajes (Scrollable) */}
+      <Box 
+        ref={chatContainerRef} // <-- El Ref va aquí
         sx={{ 
           flex: 1, 
           overflowY: 'auto', 
           p: 2, 
           ...getScrollbarStyles(theme),
           display: 'flex',
-          flexDirection: 'column'
-        }}>
+          flexDirection: 'column' 
+        }}
+      >
         {loadingHistory ? (
           <CircularProgress sx={{ display: 'block', mx: 'auto', mt: 4 }} />
         ) : (
           chatHistory.map((msg, index) => {
             const prevMsg = chatHistory[index - 1];
             const isStartOfGroup = index === 0 || !prevMsg || msg.sender.username !== prevMsg.sender.username;
-
             if (msg.message_type === 'CODE') {
               return <CodeShareBlock key={msg.id} sender={msg.sender} code={msg.content} language={msg.language} time={msg.timestamp} isStartOfGroup={isStartOfGroup} user={user} onCopy={onNotify} />
             }
@@ -323,14 +317,17 @@ const LessonChat = ({ theme, lessonId, conversationId, onNotify }) => {
             Aún no hay mensajes en este chat.
           </Typography>
         )}
-        <div ref={messagesEndRef} />
       </Box>
       <Divider />
+      
+      {/* --- ¡¡¡EL FORMULARIO DE INPUT (RESTURADO)!!! --- */}
       <Box component="form" onSubmit={handleChatSubmit} sx={{ p: 0, bgcolor: 'background.default' }}>
         <Tabs value={tabValue} onChange={(e, val) => setTabValue(val)} variant="fullWidth" sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tab icon={<ChatIcon />} iconPosition="start" label="Mensaje" sx={{minHeight: 48}} />
           <Tab icon={<CodeIcon />} iconPosition="start" label="CodeShare" sx={{minHeight: 48}} />
         </Tabs>
+        
+        {/* Panel de Texto */}
         <Box sx={{ p: 2, display: tabValue === 0 ? 'block' : 'none' }}>
           <TextField
             fullWidth
@@ -348,6 +345,7 @@ const LessonChat = ({ theme, lessonId, conversationId, onNotify }) => {
             }}
           />
         </Box>
+        {/* Panel de Código */}
         <Box sx={{ p: 2, display: tabValue === 1 ? 'block' : 'none' }}>
           <FormControl fullWidth size="small" sx={{ mb: 1.5 }} disabled={readyState !== 1 || isSending}>
             <InputLabel>Lenguaje</InputLabel>
@@ -379,6 +377,7 @@ const LessonChat = ({ theme, lessonId, conversationId, onNotify }) => {
           />
         </Box>
       </Box>
+      {/* --- FIN DEL FORMULARIO RESTAURADO --- */}
     </Box>
   );
 };
@@ -470,46 +469,239 @@ const LessonNotes = ({ theme, lessonId }) => {
 };
 
 // --- Componente Maqueta (PanelProfesor) ---
-const ProfessorPanel = ({ theme }) => {
+// --- ¡¡¡COMPONENTE "PANEL DE PROFESOR" FUNCIONAL!!! ---
+// --- ¡REEMPLAZA TU 'ProfessorPanel' CON ESTA VERSIÓN COMPLETA! ---
+// --- ¡REEMPLAZA TU 'ProfessorPanel' CON ESTE CÓDIGO COMPLETO! ---
+
+const ProfessorPanel = ({ 
+  theme, 
+  onGiveXp,
+  contacts, 
+  courseId, 
+  connectedIds,
+  sendJsonMessage,       // Prop para enviar mensajes WS
+  websocketReadyState, // Prop para saber si el WS está listo
+  quizStats              // Prop para las estadísticas del quiz
+}) => {
+  const navigate = useNavigate();
+
+  // --- Lógica del Pilar 2 (Quiz en Vivo) ---
+  const [quizzes, setQuizzes] = useState([]);
+  const [loadingQuizzes, setLoadingQuizzes] = useState(true);
+  const [selectedQuizId, setSelectedQuizId] = useState(null);
+  const [quizInProgress, setQuizInProgress] = useState(false);
+
+  // 1. Cargar la lista de quizzes disponibles desde la API
+  useEffect(() => {
+    const fetchQuizzes = async () => {
+      if (!courseId) return;
+      try {
+        setLoadingQuizzes(true);
+        // Llama a la API que creamos en views.py
+        const response = await axiosInstance.get(`/api/course/${courseId}/quizzes/`);
+        setQuizzes(response.data);
+      } catch (error) {
+        console.error("Error al cargar quizzes:", error);
+      } finally {
+        setLoadingQuizzes(false);
+      }
+    };
+    fetchQuizzes();
+  }, [courseId]); // Se ejecuta si el courseId cambia
+
+  // 2. Función para ENVIAR el comando de inicio por WebSocket
+  const handleLaunchQuiz = () => {
+    // Comprueba si el socket está abierto
+    if (websocketReadyState !== ReadyState.OPEN || !selectedQuizId) {
+      console.error("Selecciona un quiz y asegúrate de estar conectado.");
+      return;
+    }
+
+    // Coincide con tu 'consumers.py' (evento START_QUIZ)
+    const payload = {
+      message_type: "START_QUIZ",
+      quiz_id: selectedQuizId
+    };
+
+    // Usa la prop para enviar el mensaje
+    sendJsonMessage(payload);
+    setQuizInProgress(true);
+    console.log("Comando START_QUIZ enviado para el quiz:", selectedQuizId);
+  };
+  
+  // --- Lógica para el gráfico de barras ---
+  const statsWithPercentages = quizStats ? Object.entries(quizStats.choices).map(([choiceId, count]) => {
+      const percentage = (quizStats.total > 0) ? (count / quizStats.total) * 100 : 0;
+      return {
+        id: choiceId,
+        count: count,
+        percentage: percentage
+      };
+    }) : [];
+
+  // --- Renderizado del Panel (Pilar 1 + Pilar 2) ---
+  // Usamos un Fragment (<>) en lugar de un Box para que encaje en el TabPanel
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+    <>
+      {/* Botones Principales (Finalizar / Calificaciones) */}
       <motion.div variants={itemVariants}>
-        <Paper sx={{...glassPaperStyle(theme), p: 3}}>
+        <Paper sx={{...glassPaperStyle(theme), p: 3, boxShadow: 'none', background: 'none'}}>
           <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
             Panel del Profesor
           </Typography>
-          <Button fullWidth variant="contained" color="secondary" size="large">
+          <Button fullWidth variant="contained" color="secondary" size="large" sx={{mb: 2}}>
             Finalizar Clase para Todos
+          </Button>
+          <Button 
+            fullWidth 
+            variant="outlined" 
+            size="small" 
+            component={RouterLink}
+            to={`/courses/${courseId}/grades`}
+            startIcon={<GradeIcon />}
+          >
+            Ver Libro de Calificaciones
           </Button>
         </Paper>
       </motion.div>
+
+      {/* --- Sección del Pilar 2 (Quiz en Vivo) --- */}
       <motion.div variants={itemVariants}>
-        <Paper sx={{...glassPaperStyle(theme), p: 3, height: 600}}>
+        <Paper sx={{...glassPaperStyle(theme), p: 3, mt: 3, boxShadow: 'none', background: 'none'}}>
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+            Desafío en Vivo
+          </Typography>
+          
+          {/* VISTA 1: Seleccionar Quiz */}
+          {!quizInProgress && !loadingQuizzes && (
+            <Box sx={{display: 'flex', flexDirection: 'column', gap: 2}}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Selecciona un Quiz...</InputLabel>
+                <Select
+                  label="Selecciona un Quiz..."
+                  onChange={(e) => setSelectedQuizId(e.target.value)}
+                  value={selectedQuizId || ""}
+                >
+                  {quizzes.map(quiz => (
+                    <MenuItem key={quiz.id} value={quiz.id}>
+                      {quiz.title}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <Button 
+                variant="contained"
+                onClick={handleLaunchQuiz} 
+                disabled={!selectedQuizId || websocketReadyState !== ReadyState.OPEN}
+                startIcon={<EmojiEventsIcon />}
+              >
+                🚀 Lanzar Quiz Ahora
+              </Button>
+            </Box>
+          )}
+
+          {/* VISTA 2: Cargando Quizzes */}
+          {loadingQuizzes && <CircularProgress size={24} />}
+
+          {/* VISTA 3: ¡Resultados en Vivo! */}
+          {quizInProgress && (
+            <Box>
+              <Typography variant="body1" sx={{ mb: 1, fontWeight: 600 }}>Resultados en vivo:</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Total de respuestas: {quizStats ? quizStats.total : 0}
+              </Typography>
+              
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {statsWithPercentages.length > 0 ? (
+                  statsWithPercentages.map((stat, index) => (
+                    <Box key={stat.id}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                        <Typography variant="body2">{`Opción ${String.fromCharCode(65 + index)}`}</Typography>
+                        <Typography variant="body2" sx={{fontWeight: 600}}>{`${stat.count} Votos`}</Typography>
+                      </Box>
+                      {/* El Gráfico de Barras */}
+                      <Box sx={{ width: '100%', height: '24px', bgcolor: 'rgba(255,255,255,0.1)', borderRadius: 1, overflow: 'hidden' }}>
+                        <Box sx={{
+                          width: `${stat.percentage}%`,
+                          height: '100%',
+                          bgcolor: 'primary.main',
+                          transition: 'width 0.3s ease-out'
+                        }} />
+                      </Box>
+                    </Box>
+                  ))
+                ) : (
+                  <Typography variant="body2" color="text.secondary">Esperando respuestas...</Typography>
+                )}
+              </Box>
+              
+              <Button sx={{mt: 3}} variant="outlined" color="error" onClick={() => {
+                setQuizInProgress(false);
+                setSelectedQuizId(null); // Resetea el quiz seleccionado
+                // (Podrías enviar un evento 'END_QUIZ' aquí)
+              }}>
+                Terminar Quiz
+              </Button>
+            </Box>
+          )}
+        </Paper>
+      </motion.div>
+
+      {/* Sección del Pilar 1 (Alumnos Conectados) */}
+      <motion.div variants={itemVariants}>
+        <Paper sx={{...glassPaperStyle(theme), p: 3, mt: 3, height: 400, display: 'flex', flexDirection: 'column', boxShadow: 'none', background: 'none'}}>
           <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
-            Alumnos Conectados (3)
+            Alumnos Conectados ({contacts.length})
           </Typography>
           <Box sx={{flex: 1, overflowY: 'auto', ...getScrollbarStyles(theme)}}>
             <List>
-              <ListItem><ListItemAvatar><Avatar sx={{bgcolor: 'primary.light'}}>L</Avatar></ListItemAvatar><ListItemText primary="leybrak (Tú)" /></ListItem>
-              <ListItem><ListItemAvatar><Avatar sx={{bgcolor: 'secondary.light'}}>A</Avatar></ListItemAvatar><ListItemText primary="Ana" /><Tooltip title="Premiar mascota"><IconButton color="warning"><EmojiEventsIcon /></IconButton></Tooltip></ListItem>
-              <ListItem><ListItemAvatar><Avatar>B</Avatar></ListItemAvatar><ListItemText primary="Bagas Mahpie" /><Tooltip title="Premiar mascota"><IconButton color="warning"><EmojiEventsIcon /></IconButton></Tooltip></ListItem>
+              {contacts.map(contact => {
+                const isConnected = connectedIds.has(contact.id);
+                return (
+                  <ListItem key={contact.id}>
+                    <ListItemAvatar><Avatar sx={{bgcolor: 'primary.light'}}>{contact.username[0]}</Avatar></ListItemAvatar>
+                    <ListItemText 
+                      primary={contact.username}
+                      secondary={
+                        <Typography 
+                          component="span" 
+                          variant="body2" 
+                          color={isConnected ? 'success.main' : 'text.secondary'}
+                          sx={{display: 'flex', alignItems: 'center', gap: 0.5}}
+                        >
+                          <Box sx={{width: 8, height: 8, borderRadius: '50%', bgcolor: isConnected ? 'success.main' : 'text.secondary'}} />
+                          {isConnected ? 'Conectado' : 'Desconectado'}
+                        </Typography>
+                      }
+                    />
+                    <Tooltip title="Premiar mascota (+10 XP)">
+                      <IconButton 
+                        color="warning" 
+                        onClick={() => onGiveXp(contact.id, 10)}
+                      >
+                        <EmojiEventsIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </ListItem>
+                );
+              })}
             </List>
           </Box>
         </Paper>
       </motion.div>
-    </Box>
-  )
+    </>
+  );
 };
-
 
 // === COMPONENTE PRINCIPAL ===
 function LessonPage() {
   const { courseId, lessonId } = useParams(); 
   const navigate = useNavigate();
   const theme = useTheme(); 
+  const { user, authTokens, loading: authLoading } = useAuth();
   const fileInputRef = useRef(null); 
-
-  const isProfessor = false; 
+  console.log("USER DESDE AUTHCONTEXT:", user);
+  const isProfessor = user.role === 'PROFESSOR';
 
   // --- Estados de la Lección ---
   const [lesson, setLesson] = useState(null);
@@ -538,10 +730,25 @@ function LessonPage() {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [snackbarSeverity, setSnackbarSeverity] = useState("success");
-  const { user } = useAuth();
+  
+  const [chatHistory, setChatHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
 
+  const [contacts, setContacts] = useState([]);
+  const [connectedUserIds, setConnectedUserIds] = useState(new Set());
+  const [quizModalData, setQuizModalData] = useState(null);
+  const [quizStats, setQuizStats] = useState(null);
+  const [currentXp, setCurrentXp] = useState(user?.experience_points || 0);
+  if (authLoading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
   // --- useEffect CONECTADO ---
   useEffect(() => {
+    if (!user) return;
     const fetchLessonData = async () => {
       try {
         setLoading(true);
@@ -582,6 +789,7 @@ function LessonPage() {
               setSubmission(existingSubmission);
               setSubmissionContent(existingSubmission.content || "");
             }
+            
           } catch (err) {
             if (err.response && err.response.status === 404) {
               console.log("Esta lección no tiene tarea.");
@@ -592,7 +800,17 @@ function LessonPage() {
             setLoadingAssignment(false);
           }
         })();
-
+        if (user.role === 'PROFESSOR') {
+          (async () => {
+            try {
+              // ¡Llamamos al NUEVO endpoint!
+              const response = await axiosInstance.get(`/api/course/${courseId}/students/`);
+              setContacts(response.data); 
+            } catch (err) {
+              console.error("Error al cargar la lista de alumnos:", err);
+            }
+          })();
+        }
         (async () => {
           try {
             if (lessonId === "2") { 
@@ -615,7 +833,7 @@ function LessonPage() {
       }
     };
     fetchLessonData();
-  }, [lessonId, courseId, navigate]);
+  }, [lessonId, courseId, navigate,user]);
 
   // --- Handlers (Funcionales) ---
   const handleMarkAsComplete = async () => {
@@ -707,7 +925,130 @@ function LessonPage() {
   const handleRemoveFile = () => {
     setFileToUpload(null);
   };
+  const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(
+    `ws://127.0.0.1:8000/ws/chat/lesson/${lessonId}/?token=${authTokens?.access}`,
+    {
+      onOpen: () => {
+        console.log('Socket está ABIERTO, anunciando presencia...');
+        sendJsonMessage({
+          message_type: 'ANNOUNCE_PRESENCE'
+        });
+      },
+      onClose: (e) => console.log('Socket de Gamificación/Chat cerrado', e.reason),
+      onError: (e) => console.error('Socket de Gamificación/Chat error:', e),
+      shouldReconnect: (closeEvent) => true,
+    },
+    !!(authTokens && lesson) // Solo conecta si tenemos token Y lección
+  );
+  useEffect(() => {
+    if (lastJsonMessage !== null) {
+      
+      if (lastJsonMessage.type === 'chat_message') {
+        setChatHistory(prev => [...prev, lastJsonMessage.message]);
+      } 
+      else if (lastJsonMessage.type === 'xp_notification') {
+        console.log("XP Recibido:", lastJsonMessage);
+        setSnackbarMessage(`¡${lastJsonMessage.username} ha ganado ${lastJsonMessage.points} XP!`);
+        setSnackbarSeverity("success");
+        setSnackbarOpen(true);
+        if (lastJsonMessage.user_id === user.id) {
+                setCurrentXp(lastJsonMessage.total_xp);
+            }
+      }
+      else if (lastJsonMessage.type === 'quiz_question') {
+        if (user.role !== 'PROFESSOR') {
+              const questionData = lastJsonMessage.data;
+              console.log("¡QUIZ RECIBIDO! (Soy Alumno)", questionData);
+              // ¡Guarda la pregunta en el estado para mostrar el modal!
+              setQuizModalData(questionData);
+            } else {
+              console.log("Quiz recibido (Soy Profesor, lo ignoro)");
+            }
+      }
+      else if (lastJsonMessage.type === 'quiz_answer_received') {
+        // (Opcional) Muestra quién ha respondido
+        console.log(`${lastJsonMessage.data.username} ha respondido.`);
+      }
+      else if (lastJsonMessage.type === 'user_joined') {
+            // El objeto 'user' está anidado
+            const joinedUser = lastJsonMessage.user; 
+            if (joinedUser) {
+              console.log('Usuario conectado:', joinedUser.username);
+              // Añade el ID del 'joinedUser' al 'Set'
+              setConnectedUserIds(prevIds => new Set(prevIds).add(joinedUser.id));
+            }
+          }
 
+      else if (lastJsonMessage.type === 'user_left') {
+        console.log('Usuario desconectado:', lastJsonMessage.user_id);
+        // Elimina el ID del 'Set'
+        setConnectedUserIds(prevIds => {
+          const newIds = new Set(prevIds);
+          newIds.delete(lastJsonMessage.user_id);
+          return newIds;
+        });
+      }
+      else if (lastJsonMessage.type === 'user_joined') {
+            const joinedUser = lastJsonMessage.user;
+            if (joinedUser) {
+              // --- ¡AÑADE ESTOS LOGS! ---
+              console.log(`[DIAGNÓSTICO] user_joined recibido:`, joinedUser);
+              
+              setConnectedUserIds(prevIds => {
+                const newIds = new Set(prevIds).add(joinedUser.id);
+                
+                // --- ¡AÑADE ESTE LOG! ---
+                console.log(`[DIAGNÓSTICO] Nuevo Set de Conectados:`, newIds);
+                return newIds;
+              });
+            }
+          }
+      else if (lastJsonMessage.type === 'quiz_stats_update') {
+        const { stats } = lastJsonMessage.data;
+
+        // Solo actualiza las estadísticas si eres el profesor
+        if (user.role === 'PROFESSOR') {
+          console.log("Estadísticas de quiz recibidas:", stats);
+          setQuizStats(stats);
+        }
+      }
+    }
+  }, [lastJsonMessage]);
+  useEffect(() => {
+    // Comprueba si el estado del socket es 'OPEN' (1)
+    if (readyState === ReadyState.OPEN) {
+      console.log('Socket está ABIERTO, anunciando presencia...');
+      
+      // Ahora que ESTAMOS SEGUROS de que está abierto, enviamos el anuncio
+      sendJsonMessage({
+        message_type: 'ANNOUNCE_PRESENCE'
+      });
+    }
+  }, [readyState, sendJsonMessage]);
+  const handleGiveXp = (targetUserId, points) => {
+    console.log(`Dando ${points} XP a ${targetUserId}...`);
+    sendJsonMessage({
+      message_type: "GIVE_XP",
+      target_user_id: targetUserId,
+      points: points
+    });
+  };
+  const handleAnswerSubmit = (questionId, choiceId) => {
+    if (readyState !== 1) { // 1 = OPEN
+      console.error("Socket no está listo para enviar respuesta.");
+      return;
+    }
+    
+    // Envía la respuesta al consumer
+    sendJsonMessage({
+      message_type: "SUBMIT_ANSWER",
+      question_id: questionId,
+      choice_id: choiceId
+    });
+
+    // Oculta el modal después de responder
+    setQuizModalData(null); 
+  };
   // --- Lógica para el Panel de Calificaciones (Funcional) ---
   const pendingTasks = [];
   if (assignment && !submission) {
@@ -760,6 +1101,27 @@ function LessonPage() {
   }
   if (!lesson) return null;
 
+  const calculateLevel = (xp) => {
+      const xpPerLevel = 100; // 100 XP para subir de nivel
+      const level = Math.floor(xp / xpPerLevel) + 1;
+      const xpInCurrentLevel = xp % xpPerLevel;
+      const xpForNextLevel = xpPerLevel;
+      const percentage = (xpInCurrentLevel / xpForNextLevel) * 100;
+      
+      let petEmoji = '🥚'; // Nivel 1+
+      if (level >= 5) petEmoji = '🐣'; // Nivel 5+
+      if (level >= 10) petEmoji = '🐉'; // Nivel 10+
+      
+      return {
+          level,
+          xpInCurrentLevel,
+          xpForNextLevel,
+          percentage,
+          petEmoji
+      };
+  };
+  
+  const petData = calculateLevel(currentXp);
   // --- RENDERIZADO PRINCIPAL ---
   return (
     <Box 
@@ -1019,12 +1381,67 @@ function LessonPage() {
             
             {isProfessor ? (
             
-                <Box sx={{height: '100%', display: 'flex', flexDirection: 'column'}}>
-                    <ProfessorPanel theme={theme} />
-                </Box>
+            // --- ¡NUEVA VISTA DE PESTAÑAS PARA EL PROFESOR! ---
+              <Paper sx={{...glassPaperStyle(theme), height: '100%', p: 0, display: 'flex', flexDirection: 'column'}}>
+                  <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 1, flexShrink: 0 }}>
+                      <Tabs 
+                          // Re-usamos el estado 'sideTabValue'
+                          value={sideTabValue}
+                          onChange={handleSideTabChange} 
+                          variant="fullWidth" 
+                      >
+                          <Tooltip title="Panel de Control"><Tab icon={<PeopleIcon />} aria-label="Panel" sx={{minWidth: 'auto'}} /></Tooltip>
+                          <Tooltip title="Chat de la Lección"><Tab icon={<ChatIcon />} aria-label="Chat" sx={{minWidth: 'auto'}} /></Tooltip>
+                      </Tabs>
+                  </Box>
 
-            ) : (
+                  <Box sx={{ 
+                      flex: 1,             
+                      overflow: 'hidden',  
+                      position: 'relative' 
+                  }}>
+                      {/* Pestaña 1: El Panel de Control */}
+                      <TabPanel value={sideTabValue} index={0} theme={theme} enableScroll={false}>
+                          <ProfessorPanel 
+                            theme={theme} 
+                            contacts={contacts}
+                            onGiveXp={handleGiveXp}
+                            courseId={courseId}
+                            connectedIds={connectedUserIds}
+                            sendJsonMessage={sendJsonMessage}
+                            websocketReadyState={readyState}
+                            quizStats={quizStats}
+                            isActive={sideTabValue === 0}
+                          />
+                      </TabPanel>
 
+                      {/* Pestaña 2: El Chat de la Lección */}
+                      <TabPanel value={sideTabValue} index={1} theme={theme} enableScroll={false}>
+                          <LessonChat 
+                            theme={theme} 
+                            lessonId={lesson.id}
+                            conversationId={lesson.chat_conversation}
+                            user={user}
+                            chatHistory={chatHistory}
+                            loadingHistory={loadingHistory}
+                            setChatHistory={setChatHistory}
+                            setLoadingHistory={setLoadingHistory}
+                            readyState={readyState}
+                            isSending={isSubmitting} // Usamos 'isSubmitting' de la tarea para deshabilitar
+                            onSendJsonMessage={sendJsonMessage}
+                            isActive={sideTabValue === 1}
+                            onNotify={(msg) => { 
+                              setSnackbarMessage(msg);
+                              setSnackbarSeverity("success");
+                              setSnackbarOpen(true);
+                            }}
+                          />
+                      </TabPanel>
+                  </Box>
+              </Paper>
+              // --- FIN DE LA VISTA DEL PROFESOR ---
+
+          ) : (
                 // --- VISTA DEL ALUMNO ---
                 <Box sx={{
                     display: 'flex',
@@ -1033,28 +1450,11 @@ function LessonPage() {
                     height: '100%' 
                 }}>
                     
-                    {/* Widget de Completar (FUNCIONAL) */}
-                    <motion.div variants={itemVariants} style={{ flexShrink: 0 }}>
-                        <Paper sx={{...glassPaperStyle(theme), p: 3}}>
-                            {isCompleted ? (
-                                <Alert severity="success" icon={<CheckCircleIcon fontSize="inherit" />}>
-                                ¡Lección Completada!
-                                </Alert>
-                            ) : (
-                                <Button 
-                                  fullWidth 
-                                  variant="contained" 
-                                  color="primary" 
-                                  size="large" 
-                                  startIcon={<CheckCircleIcon />} 
-                                  onClick={handleMarkAsComplete}
-                                  disabled={isCompleting}
-                                >
-                                  {isCompleting ? "Guardando..." : "Marcar como Completada"}
-                                </Button>
-                            )}
-                        </Paper>
-                    </motion.div>
+                    {/* NOTA: El 'motion.div' duplicado que estaba aquí
+                      ha sido eliminado para evitar el error.
+                      El widget de pestañas de abajo ahora es el único
+                      lugar que renderiza LessonChat y LessonNotes.
+                    */}
 
                     {/* Widget de Pestañas */}
                     <motion.div variants={itemVariants} style={{
@@ -1082,12 +1482,23 @@ function LessonPage() {
                                 overflow: 'hidden',  
                                 position: 'relative' 
                             }}>
-                                <TabPanel value={sideTabValue} index={0} theme={theme}>
-                                    {/* ¡¡¡CHAT AHORA ES FUNCIONAL!!! */}
+                                <TabPanel value={sideTabValue} index={0} theme={theme} enableScroll={false}>
+                                    {/* ¡¡¡CHAT AHORA ES FUNCIONAL Y CORREGIDO!!! */}
                                     <LessonChat 
                                       theme={theme} 
                                       lessonId={lesson.id}
-                                      conversationId={lesson.chat_conversation} 
+                                      conversationId={lesson.chat_conversation}
+                                      // --- Props requeridos añadidos ---
+                                      user={user}
+                                      chatHistory={chatHistory}
+                                      loadingHistory={loadingHistory}
+                                      setChatHistory={setChatHistory}
+                                      setLoadingHistory={setLoadingHistory}
+                                      readyState={readyState}
+                                      isSending={isSubmitting}
+                                      onSendJsonMessage={sendJsonMessage}
+                                      isActive={sideTabValue === 0}
+                                      // --- Fin de props añadidos ---
                                       onNotify={(msg) => { 
                                         setSnackbarMessage(msg);
                                         setSnackbarSeverity("success");
@@ -1095,11 +1506,11 @@ function LessonPage() {
                                       }}
                                     />
                                 </TabPanel>
-                                <TabPanel value={sideTabValue} index={1} theme={theme}>
+                                <TabPanel value={sideTabValue} index={1} theme={theme} enableScroll={false}>
                                     {/* ¡NOTAS ES FUNCIONAL! */}
                                     <LessonNotes theme={theme} lessonId={lesson.id} />
                                 </TabPanel>
-                                <TabPanel value={sideTabValue} index={2} theme={theme}>
+                                <TabPanel value={sideTabValue} index={2} theme={theme} enableScroll={false}>
                                     {/* ¡RECURSOS ES REAL! */}
                                     <List sx={{p: 2}}>
                                     {lesson.resources && lesson.resources.length > 0 ? (
@@ -1118,7 +1529,7 @@ function LessonPage() {
                                     )}
                                     </List>
                                 </TabPanel>
-                                <TabPanel value={sideTabValue} index={3} theme={theme}>
+                                <TabPanel value={sideTabValue} index={3} theme={theme} enableScroll={false}>
                                     {/* ¡ENTREGABLES ES REAL! */}
                                     <Box sx={{display: 'flex', flexDirection: 'column', minHeight: '100%'}}>
                                       <Box sx={{ flexGrow: 1 }}>
@@ -1178,6 +1589,7 @@ function LessonPage() {
                                       </Box>
                                     </Box>
                                 </TabPanel>
+                                {/* --- ¡REEMPLAZA ESTE BLOQUE ENTERO! --- */}
                                 <TabPanel value={sideTabValue} index={4} theme={theme}>
                                   <Box sx={{
                                     display: 'flex',
@@ -1190,20 +1602,24 @@ function LessonPage() {
                                       Tu Mascota
                                     </Typography>
                                     
-                                    {/* Avatar de la Mascota (Maqueta) */}
+                                    {/* Avatar de la Mascota (Funcional) */}
                                     <Avatar sx={{ width: 120, height: 120, fontSize: '4rem', bgcolor: 'grey.700' }}>
-                                      🥚
+                                      {petData.petEmoji}
                                     </Avatar>
                                     
-                                    {/* Barra de XP (Maqueta) */}
+                                    {/* Barra de XP (Funcional) */}
                                     <Box sx={{ width: '100%' }}>
                                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                        <Typography variant="body2" sx={{ fontWeight: 600 }}>Nivel 1</Typography>
-                                        <Typography variant="body2" color="text.secondary">15 / 100 XP</Typography>
+                                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                          Nivel {petData.level}
+                                        </Typography>
+                                        <Typography variant="body2" color="text.secondary">
+                                          {petData.xpInCurrentLevel} / {petData.xpForNextLevel} XP
+                                        </Typography>
                                       </Box>
                                       <LinearProgress 
                                         variant="determinate" 
-                                        value={15} 
+                                        value={petData.percentage} // <-- Conectado
                                         sx={{ height: 10, borderRadius: 5 }} 
                                       />
                                     </Box>
@@ -1219,6 +1635,7 @@ function LessonPage() {
                                     </Button>
                                   </Box>
                                 </TabPanel>
+                                {/* --- FIN DEL REEMPLAZO --- */}
                             </Box>
                         </Paper>
                     </motion.div>
@@ -1245,7 +1662,36 @@ function LessonPage() {
             )}
         </Box>
       </Box> {/* === FIN DEL CAMBIO A FLEXBOX === */}
-      
+
+      {quizModalData && (
+        <Modal
+          open={true}
+          // Opcional: onClose={() => setQuizModalData(null)}
+          sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Paper sx={{ p: 4, width: '90%', maxWidth: 500, outline: 'none' }}>
+            <Typography variant="h5" color="primary" gutterBottom>
+              ¡Desafío Rápido!
+            </Typography>
+            <Typography variant="h6" sx={{ my: 2, fontWeight: 600 }}>
+              {quizModalData.question_text}
+            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 3 }}>
+              {quizModalData.choices.map(choice => (
+                <Button
+                  key={choice.id}
+                  variant="outlined"
+                  size="large"
+                  onClick={() => handleAnswerSubmit(quizModalData.question_id, choice.id)}
+                  sx={{ justifyContent: 'flex-start', p: 1.5 }}
+                >
+                  {choice.text}
+                </Button>
+              ))}
+            </Box>
+          </Paper>
+        </Modal>
+      )}
       {/* --- ¡Snackbar AÑADIDO! --- */}
       <Snackbar
         open={snackbarOpen}

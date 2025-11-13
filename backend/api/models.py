@@ -1,7 +1,7 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.conf import settings
-
+from django.utils import timezone
 
 # ====================================================================
 # 1. Modelo de Usuario
@@ -20,6 +20,11 @@ class User(AbstractUser):
     )
     experience_points = models.IntegerField(default=0, help_text="XP para la mascota")
     bio = models.TextField(blank=True, null=True, help_text="Biografía del instructor")
+    profile_image = models.ImageField(
+        upload_to='profile_pics/', 
+        null=True, 
+        blank=True
+    )
     # Nota: Asegúrate de tener 'api.User' en tu settings.AUTH_USER_MODEL
 
 # ====================================================================
@@ -448,12 +453,31 @@ class Conversation(models.Model):
         settings.AUTH_USER_MODEL,
         related_name='conversations'
     )
-    created_at = models.DateTimeField(auto_now_add=True)
+    
 
     def __str__(self):
         if self.is_group and self.name:
             return f"Grupo: {self.name}"
         return f"Conversación {self.id}"
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    last_message = models.ForeignKey(
+        'Message',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='last_message_for'
+    )
+    def get_last_message(self):
+        return self.messages.order_by('-timestamp').first()
+    def get_last_message_snippet(self, obj):
+        last_message = getattr(obj, 'last_msg_content', None)
+        if not last_message:
+            msg = obj.get_last_message()
+            return msg.content if msg else "Sin mensajes"
+        return last_message
+
 
 # ====================================================================
 # 18. NUEVO: Mensaje (Inbox)
@@ -543,3 +567,18 @@ class LessonNote(models.Model):
 
     def __str__(self):
         return f"Nota de {self.user.username} en {self.lesson.title}"
+    
+class ReadReceipt(models.Model):
+    """
+    Rastrea la última vez que un usuario leyó una conversación.
+    """
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='read_receipts')
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='read_receipts')
+    last_read_timestamp = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        # Una entrada por usuario y conversación
+        unique_together = ('user', 'conversation')
+
+    def __str__(self):
+        return f"{self.user.username} leyó {self.conversation.name}"

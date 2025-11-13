@@ -35,6 +35,7 @@ def get_user_from_token(token_key):
         # Si el token expiró, es inválido o el usuario no existe
         return AnonymousUser()
     except Exception as e:
+        print(f"[MIDDLEWARE LOG] ERROR en get_user_from_token: {e}")
         return AnonymousUser()
 
 class TokenAuthMiddleware(BaseMiddleware):
@@ -50,14 +51,19 @@ class TokenAuthMiddleware(BaseMiddleware):
             query_string = scope['query_string'].decode()
             params = dict(qp.split('=') for qp in query_string.split('&'))
             token_key = params.get('token')
-            
+            print(f"\n[MIDDLEWARE LOG] Nueva conexión WS.")
+            print(f"[MIDDLEWARE LOG] Query string: {query_string}")
             if token_key:
+                print(f"[MIDDLEWARE LOG] Token encontrado. Buscando usuario...")
                 # Si hay token, busca al usuario (¡usando la nueva función!)
                 scope['user'] = await get_user_from_token(token_key)
+                print(f"[MIDDLEWARE LOG] Usuario encontrado: {scope['user']}") # <-- ¡El más importante!
             else:
+                print("[MIDDLEWARE LOG] No se encontró token. Usuario Anónimo.")
                 # Si no hay token, es anónimo
                 scope['user'] = AnonymousUser()
         except Exception as e:
+            print(f"[MIDDLEWARE LOG] ERROR en Middleware: {e}")
             scope['user'] = AnonymousUser()
             
         # Continúa con la conexión

@@ -20,7 +20,7 @@ export function AuthProvider({ children }) {
 
       if (accessToken) {
         try {
-          const response = await axiosInstance.get('/api/auth/user/');
+          const response = await axiosInstance.get('/api/users/me/');
           setUser(response.data);
           
           // --- ¡CAMBIO 2: Guardar los tokens en el estado! ---
@@ -51,7 +51,7 @@ export function AuthProvider({ children }) {
       // --- ¡CAMBIO 3: Guardar los tokens en el estado! ---
       setAuthTokens({ access: accessToken, refresh: refreshToken });
 
-      const userResponse = await axiosInstance.get('/api/auth/user/');
+      const userResponse = await axiosInstance.get('/api/users/me/');
       setUser(userResponse.data); 
       navigate('/'); 
   };

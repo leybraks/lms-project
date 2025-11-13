@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
-import axiosInstance from '../api/axios'; // Asumiendo que está en /src
+import axiosInstance from '../api/axios'; 
 import { useTheme } from '@mui/material/styles';
 import { motion } from "framer-motion";
+import { useAuth } from '../context/AuthContext'; // <-- ¡NUEVA IMPORTACIÓN!
 
 import {
   Box,
@@ -29,7 +30,7 @@ import {
   Tabs,
   Tab,
   Avatar,
-  Container // <-- ¡Importante!
+  Container
 } from '@mui/material';
 
 // --- Iconos ---
@@ -49,6 +50,8 @@ import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import VideoLabelIcon from '@mui/icons-material/VideoLabel';
 import AllInclusiveIcon from '@mui/icons-material/AllInclusive';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
+import EditIcon from '@mui/icons-material/Edit'; // <-- ¡NUEVO ICONO!
+import BarChartIcon from '@mui/icons-material/BarChart'; // <-- ¡NUEVO ICONO!
 
 // === VARIANTES DE ANIMACIÓN (Sin cambios) ===
 const containerVariants = {
@@ -100,10 +103,12 @@ function CourseDetailPage() {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const theme = useTheme(); 
+  const { user } = useAuth(); // <-- ¡NUEVO! Obtenemos el usuario
   
-  // --- Estados (Sin cambios) ---
+  // --- Estados ---
   const [course, setCourse] = useState(null);
   const [isEnrolled, setIsEnrolled] = useState(false);
+  const [isOwner, setIsOwner] = useState(false); // <-- ¡NUEVO ESTADO!
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
@@ -111,8 +116,14 @@ function CourseDetailPage() {
   const [snackbarSeverity, setSnackbarSeverity] = useState("success");
   const [completedLessons, setCompletedLessons] = useState([]); 
 
-  // --- Lógica de Carga de Datos (Sin cambios) ---
+  // --- ¡¡¡LÓGICA DE CARGA ACTUALIZADA CON ROLES!!! ---
   useEffect(() => {
+    // No hacer nada si el usuario o el curso aún no han cargado
+    if (!user) {
+      setLoading(true);
+      return;
+    }
+
     const fetchCourseAndEnrollment = async () => {
       try {
         setLoading(true);
@@ -124,11 +135,23 @@ function CourseDetailPage() {
           axiosInstance.get('/api/completions/my_completions/')
         ]);
 
-        setCourse(courseResponse.data);
-        const enrolled = enrollmentResponse.data.find(e => e.course.id === parseInt(courseId));
-        setIsEnrolled(!!enrolled);
+        const courseData = courseResponse.data;
+        setCourse(courseData);
+        
         const completedIds = completionsResponse.data.map(comp => comp.lesson.id);
         setCompletedLessons(completedIds);
+
+        // --- ¡NUEVA LÓGICA DE ROL! ---
+        if (user && courseData.professor && user.username === courseData.professor.username) {
+          // Es el dueño (Profesor)
+          setIsOwner(true);
+          setIsEnrolled(false); // Un profesor no se "inscribe" a su propio curso
+        } else {
+          // Es un estudiante o visitante
+          setIsOwner(false);
+          const enrolled = enrollmentResponse.data.find(e => e.course.id === parseInt(courseId));
+          setIsEnrolled(!!enrolled);
+        }
 
       } catch (err) {
         console.error("Error al cargar el curso:", err);
@@ -138,7 +161,7 @@ function CourseDetailPage() {
       }
     };
     fetchCourseAndEnrollment();
-  }, [courseId, navigate]);
+  }, [courseId, navigate, user]); // <-- ¡DEPENDE DE USER AHORA!
 
 
   // --- Handlers de UI (Sin cambios) ---
@@ -156,7 +179,7 @@ function CourseDetailPage() {
       let message = "Error al procesar la inscripción.";
       if (err.response && err.response.status === 409) {
           message = "Ya estás inscrito en este curso.";
-          setIsEnrolled(true); // Sincroniza el estado
+          setIsEnrolled(true); 
       }
       setSnackbarMessage(message);
       setSnackbarSeverity("error");
@@ -187,8 +210,8 @@ function CourseDetailPage() {
     return course.modules[0]?.lessons[0] || null;
   };
   
-  // --- RENDERING DE ESTADOS (Sin cambios) ---
-  if (loading) {
+  // --- RENDERING DE ESTADOS ---
+  if (loading || !user) { // Muestra spinner si carga o si 'user' no está listo
     return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
   }
   if (error) {
@@ -197,7 +220,30 @@ function CourseDetailPage() {
   if (!course) return null; 
 
 
-  // --- RENDERIZADO PRINCIPAL (¡¡¡CON MODIFICACIONES!!!) ---
+  // --- Estilos para botones del Hero ---
+  const whiteButtonStyle = { 
+    width: '100%', 
+    py: 1.5, 
+    fontSize: '1rem',
+    bgcolor: 'white', 
+    color: 'primary.dark',
+    '&:hover': { bgcolor: '#f0f0f0' }
+  };
+  
+  const whiteOutlinedButtonStyle = {
+    width: '100%', 
+    py: 1.5, 
+    fontSize: '1rem',
+    bgcolor: 'transparent', 
+    color: 'white', 
+    borderColor: 'white',
+    '&:hover': { 
+      bgcolor: 'rgba(255,255,255,0.1)', 
+      borderColor: 'white' 
+    }
+  };
+
+  // --- RENDERIZADO PRINCIPAL (¡CON MODIFICACIONES!) ---
   return (
     <Box 
       component={motion.div}
@@ -214,37 +260,29 @@ function CourseDetailPage() {
     >
       
       {/* 1. SECCIÓN HERO (Banner "Fusionado") */}
-{/* 1. SECCIÓN HERO (Banner "Fusionado") */}
       <Box 
         sx={{ 
-          // El Box exterior ahora solo da el 'padding' vertical 
-          // para separar el banner del resto de la página.
           py: { xs: 3, md: 4 }, 
         }}
       >
-        {/* === CAMBIO 1: ESTILOS MOVIDOS AL CONTAINER === */}
-        {/* Ahora el Container tiene el fondo morado y los bordes redondeados */}
         <Container 
           maxWidth="xl" 
           sx={{
             background: `linear-gradient(135deg, ${theme.palette.primary.dark}, ${theme.palette.primary.main})`,
             color: 'primary.contrastText',
-            // Padding interno del banner
             py: { xs: 3, md: 4 }, 
             px: { xs: 2, md: 3 }, 
-            // Bordes redondeados en TODAS las esquinas
-            borderRadius: 4, // 16px (consistente con tu cleanPaperStyle)
+            borderRadius: 4, 
           }}
         >
           <motion.div variants={itemVariants}>
             
-            {/* === CAMBIO 2: SEPARACIÓN DE CONTENIDO === */}
             <Grid 
               container 
               spacing={4} 
               sx={{ 
                 alignItems: 'flex-start',
-                justifyContent: 'space-between' // <-- ¡Esta es la magia!
+                justifyContent: 'space-between' 
               }}
             > 
               
@@ -267,6 +305,7 @@ function CourseDetailPage() {
                 
                 {/* Stats del Hero */}
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, opacity: 0.9 }}>
+                  {/* El profesor ve su propio nombre, está bien */}
                   {course.professor && (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Avatar 
@@ -293,21 +332,37 @@ function CourseDetailPage() {
               <Grid item xs={12} md={5}>
                 <Box component={motion.div} variants={itemVariants}>
                   
-                  {/* --- LÓGICA DE BOTÓN (Estilo blanco) --- */}
-                  {isEnrolled ? (
+                  {/* --- ¡¡¡NUEVA LÓGICA DE BOTONES (3 VISTAS)!!! --- */}
+                  {isOwner ? (
+                    // --- VISTA DE PROFESOR ---
+                    <Box>
+                      <Button 
+                        variant="contained" 
+                        size="large" 
+                        startIcon={<EditIcon />} 
+                        sx={{ ...whiteButtonStyle, mb: 2 }} 
+                        onClick={() => navigate(`/courses/${courseId}/edit`)}
+                      >
+                        Editar Curso
+                      </Button>
+                      <Button 
+                        variant="outlined" 
+                        size="large" 
+                        startIcon={<BarChartIcon />} 
+                        sx={whiteOutlinedButtonStyle} 
+                        onClick={() => navigate(`/courses/${courseId}/dashboard`)}
+                      >
+                        Ver Dashboard
+                      </Button>
+                    </Box>
+
+                  ) : isEnrolled ? (
+                    // --- VISTA DE ALUMNO INSCRITO ---
                     <Button 
                       variant="contained" 
                       size="large" 
                       startIcon={<PlayCircleOutlineIcon />} 
-                      sx={{ 
-                        mb: 3, 
-                        width: '100%', 
-                        py: 1.5, 
-                        fontSize: '1rem',
-                        bgcolor: 'white', 
-                        color: 'primary.dark',
-                        '&:hover': { bgcolor: '#f0f0f0' }
-                      }} 
+                      sx={{ ...whiteButtonStyle, mb: 3 }} 
                       onClick={() => {
                         const nextLesson = findNextLesson();
                         if (nextLesson) {
@@ -317,44 +372,67 @@ function CourseDetailPage() {
                     >
                       Continuar Aprendiendo
                     </Button>
+
                   ) : (
+                    // --- VISTA DE VISITANTE ---
                     <Button 
                       variant="contained" 
                       size="large" 
                       startIcon={<SchoolIcon />} 
-                      sx={{ 
-                        mb: 3, 
-                        width: '100%', 
-                        py: 1.5, 
-                        fontSize: '1rem',
-                        bgcolor: 'white', 
-                        color: 'primary.dark',
-                        '&:hover': { bgcolor: '#f0f0f0' }
-                      }} 
+                      sx={{ ...whiteButtonStyle, mb: 3 }} 
                       onClick={handleEnroll}
                     >
                       Inscribirse Ahora
                     </Button>
                   )}
                   
-                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: 'white' }}>
-                    Este curso incluye:
-                  </Typography>
-                  
-                  <List dense sx={{ color: 'white' }}>
-                    {course.benefits.map(benefit => (
-                      <ListItem key={benefit.id} sx={{p:0, mb: 1}}>
-                        <ListItemIcon sx={{minWidth: 32, color: 'white'}}>
-                          {benefit.icon === 'video' && <VideoLabelIcon fontSize="small" />}
-                          {benefit.icon === 'article' && <ArticleIcon fontSize="small" />}
-                          {benefit.icon === 'access' && <AllInclusiveIcon fontSize="small" />}
-                          {benefit.icon === 'task' && <AssessmentIcon fontSize="small" />}
-                          {benefit.icon === 'certificate' && <EmojiEventsIcon fontSize="small" />}
-                        </ListItemIcon>
-                        <ListItemText primary={benefit.description} />
-                      </ListItem>
-                    ))}
-                  </List>
+                  {/* --- ¡¡¡NUEVA LÓGICA DE LISTA (STATS vs BENEFICIOS)!!! --- */}
+                  {isOwner ? (
+                    // --- VISTA PROFESOR: STATS ---
+                    <>
+                      <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, mt: 3, color: 'white' }}>
+                        Estadísticas del Curso
+                      </Typography>
+                      <List dense sx={{ color: 'white' }}>
+                        <ListItem sx={{p:0, mb: 1}}>
+                          <ListItemIcon sx={{minWidth: 32, color: 'white'}}><PeopleAltIcon fontSize="small" /></ListItemIcon>
+                          {/* Asumimos que la API envía 'enrollments_count' */}
+                          <ListItemText primary={`${course.enrollments_count || 0} Estudiantes Inscritos`} />
+                        </ListItem>
+                        <ListItem sx={{p:0, mb: 1}}>
+                          <ListItemIcon sx={{minWidth: 32, color: 'white'}}><ChecklistIcon fontSize="small" /></ListItemIcon>
+                           {/* (Dato mockeado, idealmente vendría de la API) */}
+                          <ListItemText primary="35% Progreso Promedio" />
+                        </ListItem>
+                        <ListItem sx={{p:0, mb: 1}}>
+                          <ListItemIcon sx={{minWidth: 32, color: 'white'}}><EmojiEventsIcon fontSize="small" /></ListItemIcon>
+                          {/* (Dato mockeado) */}
+                          <ListItemText primary="12 Certificados Emitidos" /> 
+                        </ListItem>
+                      </List>
+                    </>
+                  ) : (
+                    // --- VISTA ALUMNO/VISITANTE: BENEFICIOS ---
+                    <>
+                      <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: 'white' }}>
+                        Este curso incluye:
+                      </Typography>
+                      <List dense sx={{ color: 'white' }}>
+                        {course.benefits.map(benefit => (
+                          <ListItem key={benefit.id} sx={{p:0, mb: 1}}>
+                            <ListItemIcon sx={{minWidth: 32, color: 'white'}}>
+                              {benefit.icon === 'video' && <VideoLabelIcon fontSize="small" />}
+                              {benefit.icon === 'article' && <ArticleIcon fontSize="small" />}
+                              {benefit.icon === 'access' && <AllInclusiveIcon fontSize="small" />}
+                              {benefit.icon === 'task' && <AssessmentIcon fontSize="small" />}
+                              {benefit.icon === 'certificate' && <EmojiEventsIcon fontSize="small" />}
+                            </ListItemIcon>
+                            <ListItemText primary={benefit.description} />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </>
+                  )}
 
                 </Box>
               </Grid>
@@ -364,18 +442,13 @@ function CourseDetailPage() {
         </Container>
       </Box>
 
-      {/* 2. CONTENIDO PRINCIPAL (Columna ancha, como pediste) */}
+      {/* 2. CONTENIDO PRINCIPAL (Columna ancha) */}
       <Container maxWidth="xl" sx={{ mt: 4, mb: 4, px: {xs: 2, md: 3} }}>
         
-        {/* === CAMBIO 2: ANCHO DEL CONTENIDO === */}
-        {/* Se quitó 'justifyContent="center"' para que el Grid ocupe todo el espacio */}
         <Grid container spacing={4}>
           
           {/* --- COLUMNA ANCHA DE CONTENIDO --- */}
-          {/* Se quitó 'md={8}' para que siempre ocupe las 12 columnas */}
           <Grid item xs={12}> 
-          {/* === FIN DEL CAMBIO 2 === */}
-
             
             {/* --- ¿Qué aprenderás? --- */}
             <motion.div variants={itemVariants}>
@@ -396,7 +469,9 @@ function CourseDetailPage() {
             <motion.div variants={itemVariants}>
               <Paper sx={{...cleanPaperStyle(theme), mb: 4}}>
                 <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>Contenido del Curso</Typography>
-                {isEnrolled && course.modules && course.modules.length > 0 && (
+                
+                {/* ¡LÓGICA ACTUALIZADA! Visible para inscritos O dueños */}
+                {(isEnrolled || isOwner) && course.modules && course.modules.length > 0 && (
                   <Box sx={{ mt: 1 }}>
                     {course.modules.map((module, index) => (
                       <Accordion key={module.id} defaultExpanded={index === 0} sx={{ backgroundColor: 'background.default', border: `1px solid ${theme.palette.divider}`, borderRadius: 2, mb: 1.5, '&:before': { display: 'none' }, boxShadow: 'none' }}>
@@ -429,8 +504,16 @@ function CourseDetailPage() {
                     ))}
                   </Box>
                 )}
-                {!isEnrolled && <Alert severity="warning">Inscríbete para ver el contenido del curso.</Alert>}
-                {isEnrolled && (!course.modules || course.modules.length === 0) && <Alert severity="info">El contenido estará disponible pronto.</Alert>}
+
+                {/* ¡LÓGICA DE ALERTAS ACTUALIZADA! */}
+                {!isEnrolled && !isOwner && <Alert severity="warning">Inscríbete para ver el contenido del curso.</Alert>}
+                
+                {(isEnrolled || isOwner) && (!course.modules || course.modules.length === 0) && (
+                  <Alert severity="info">
+                    {isOwner ? "Aún no has añadido contenido. Haz clic en 'Editar Curso' para empezar." : "El contenido estará disponible pronto."}
+                  </Alert>
+                )}
+
               </Paper>
             </motion.div>
 
