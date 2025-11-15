@@ -30,11 +30,18 @@ from .views import (
     LessonChatListView,
     MarkAsReadView,
     ReadReceiptListView,
+    get_practice_world_data,
     create_live_quiz,
     get_course_students,     # <-- ¡NUEVA!
     add_experience_points,
     get_dashboard_stats,
     get_course_quizzes,
+    get_lesson_challenges,       # <-- ¡AÑADE ESTA!
+    submit_challenge_solution,
+    create_live_code_challenge,
+    get_lesson_live_quizzes,    # <-- ¡AÑADE ESTA!
+    get_lesson_live_challenges, # <-- ¡ASEGÚRATE DE QUE ESTA LÍNEA EXISTA!
+
     get_me_view # Importamos esta también, ya que existe en views.py
 ) 
 
@@ -84,7 +91,13 @@ urlpatterns = [
     path('course/<int:course_id>/students/', get_course_students, name='get_course_students'),
     path('users/<int:user_id>/add-xp/', add_experience_points, name='add_experience_points'),
     path('course/<int:course_id>/quizzes/', get_course_quizzes, name='get_course_quizzes'), 
-    path('course/<int:course_id>/create_live_quiz/', create_live_quiz, name='create_live_quiz'),
+    path('lesson/<int:lesson_id>/challenges/', get_lesson_challenges, name='get_lesson_challenges'),
+    path('challenge/<int:challenge_id>/submit/', submit_challenge_solution, name='submit_challenge_solution'),
+    path('course/<int:course_id>/practice_world/', get_practice_world_data, name='get_practice_world_data'),
+    path('lesson/<int:lesson_id>/create_live_quiz/', create_live_quiz, name='create_live_quiz'),
+    path('lesson/<int:lesson_id>/create_live_challenge/', create_live_code_challenge, name='create_live_code_challenge'),
+    path('lesson/<int:lesson_id>/live_quizzes/', get_lesson_live_quizzes, name='get_lesson_live_quizzes'),
+    path('lesson/<int:lesson_id>/live_challenges/', get_lesson_live_challenges, name='get_lesson_live_challenges'),
     path('', include(router.urls)),
 ]
 if settings.DEBUG:

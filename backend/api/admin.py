@@ -22,7 +22,9 @@ from .models import (
     CourseBenefit,
     Conversation,
     Message,
-    Grade
+    Grade,
+    CodeChallenge,      # <-- ¡IMPORTA ESTE!
+    LiveCodeChallenge
 )
 
 # ====================================================================
@@ -123,3 +125,5 @@ admin.site.register(Conversation, ConversationAdmin)
 admin.site.register(Message)
 admin.site.unregister(Submission) # <-- Des-registra la versión simple
 admin.site.register(Submission, SubmissionAdmin)
+admin.site.register(CodeChallenge)
+admin.site.register(LiveCodeChallenge)

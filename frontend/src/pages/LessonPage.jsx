@@ -5,7 +5,7 @@ import { useTheme } from '@mui/material/styles';
 import { motion } from "framer-motion";
 import PetsIcon from '@mui/icons-material/Pets';
 import { JitsiMeeting } from '@jitsi/react-sdk';
-
+import TerminalIcon from '@mui/icons-material/Terminal';
 import { 
   Box, 
   Typography, 
@@ -71,7 +71,7 @@ import useWebSocket, { ReadyState } from 'react-use-websocket';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'; 
 import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism'; 
 import { useAuth } from '../context/AuthContext'; 
-
+import CodeChallengePanel from '../components/CodeChallengePanel';
 // === VARIANTES DE ANIMACIÓN ===
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -478,69 +478,85 @@ const ProfessorPanel = ({
   onGiveXp,
   contacts, 
   courseId, 
+  lessonId, // <-- ¡NUEVA PROP!
   connectedIds,
-  sendJsonMessage,       // Prop para enviar mensajes WS
-  websocketReadyState, // Prop para saber si el WS está listo
-  quizStats              // Prop para las estadísticas del quiz
+  sendJsonMessage,
+  websocketReadyState,
+  quizStats 
 }) => {
   const navigate = useNavigate();
 
-  // --- Lógica del Pilar 2 (Quiz en Vivo) ---
-  const [quizzes, setQuizzes] = useState([]);
-  const [loadingQuizzes, setLoadingQuizzes] = useState(true);
+  // --- Estados de los Desafíos ---
+  const [liveQuizzes, setLiveQuizzes] = useState([]);
+  const [liveChallenges, setLiveChallenges] = useState([]);
+  
+  const [loading, setLoading] = useState(true);
+  
+  // Estados de selección
   const [selectedQuizId, setSelectedQuizId] = useState(null);
-  const [quizInProgress, setQuizInProgress] = useState(false);
+  const [selectedChallengeId, setSelectedChallengeId] = useState(null);
+  
+  const [gameInProgress, setGameInProgress] = useState(null); // 'quiz' o 'challenge'
 
-  // 1. Cargar la lista de quizzes disponibles desde la API
+  // 1. Cargar Quizzes Y Desafíos de ESTA lección
   useEffect(() => {
-    const fetchQuizzes = async () => {
-      if (!courseId) return;
+    const fetchLessonActivities = async () => {
+      if (!lessonId) return;
+      
+      setLoading(true);
       try {
-        setLoadingQuizzes(true);
-        // Llama a la API que creamos en views.py
-        const response = await axiosInstance.get(`/api/course/${courseId}/quizzes/`);
-        setQuizzes(response.data);
+        // Llama a ambas APIs nuevas
+        const [quizResponse, challengeResponse] = await Promise.all([
+          axiosInstance.get(`/api/lesson/${lessonId}/live_quizzes/`),
+          axiosInstance.get(`/api/lesson/${lessonId}/live_challenges/`)
+        ]);
+        
+        setLiveQuizzes(quizResponse.data);
+        setLiveChallenges(challengeResponse.data);
+        
       } catch (error) {
-        console.error("Error al cargar quizzes:", error);
+        console.error("Error al cargar actividades en vivo:", error);
       } finally {
-        setLoadingQuizzes(false);
+        setLoading(false);
       }
     };
-    fetchQuizzes();
-  }, [courseId]); // Se ejecuta si el courseId cambia
+    fetchLessonActivities();
+  }, [lessonId]); // Se ejecuta si la lección cambia
 
-  // 2. Función para ENVIAR el comando de inicio por WebSocket
+  // --- Handlers para Lanzar Juegos ---
+
   const handleLaunchQuiz = () => {
-    // Comprueba si el socket está abierto
-    if (websocketReadyState !== ReadyState.OPEN || !selectedQuizId) {
-      console.error("Selecciona un quiz y asegúrate de estar conectado.");
-      return;
-    }
+    if (websocketReadyState !== ReadyState.OPEN || !selectedQuizId) return;
 
-    // Coincide con tu 'consumers.py' (evento START_QUIZ)
     const payload = {
       message_type: "START_QUIZ",
       quiz_id: selectedQuizId
     };
-
-    // Usa la prop para enviar el mensaje
     sendJsonMessage(payload);
-    setQuizInProgress(true);
-    console.log("Comando START_QUIZ enviado para el quiz:", selectedQuizId);
+    setGameInProgress('quiz'); // Bloquea los botones
   };
   
-  // --- Lógica para el gráfico de barras ---
-  const statsWithPercentages = quizStats ? Object.entries(quizStats.choices).map(([choiceId, count]) => {
-      const percentage = (quizStats.total > 0) ? (count / quizStats.total) * 100 : 0;
-      return {
-        id: choiceId,
-        count: count,
-        percentage: percentage
-      };
-    }) : [];
+  // ¡NUEVA FUNCIÓN!
+  const handleLaunchCodeChallenge = () => {
+    if (websocketReadyState !== ReadyState.OPEN || !selectedChallengeId) return;
 
-  // --- Renderizado del Panel (Pilar 1 + Pilar 2) ---
-  // Usamos un Fragment (<>) en lugar de un Box para que encaje en el TabPanel
+    // ¡NUEVO EVENTO! que añadiremos al consumer
+    const payload = {
+      message_type: "START_CODE_CHALLENGE",
+      challenge_id: selectedChallengeId
+    };
+    sendJsonMessage(payload);
+    setGameInProgress('challenge'); // Bloquea los botones
+  };
+
+  const handleEndGame = () => {
+    setGameInProgress(null);
+    setSelectedQuizId(null);
+    setSelectedChallengeId(null);
+    // (Aquí podrías enviar un evento 'END_GAME' al consumer)
+  };
+
+  // --- Renderizado del Panel ---
   return (
     <>
       {/* Botones Principales (Finalizar / Calificaciones) */}
@@ -565,24 +581,40 @@ const ProfessorPanel = ({
         </Paper>
       </motion.div>
 
+      {/* --- Carga de Actividades --- */}
+      {loading && <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', mt: 2 }} />}
+
       {/* --- Sección del Pilar 2 (Quiz en Vivo) --- */}
       <motion.div variants={itemVariants}>
         <Paper sx={{...glassPaperStyle(theme), p: 3, mt: 3, boxShadow: 'none', background: 'none'}}>
           <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-            Desafío en Vivo
+            Desafío en Vivo (Quiz)
           </Typography>
           
-          {/* VISTA 1: Seleccionar Quiz */}
-          {!quizInProgress && !loadingQuizzes && (
+          {gameInProgress === 'quiz' ? (
+            // Vista de "Juego en Progreso"
+            <Box>
+              <Alert severity="info">¡Quiz en progreso!</Alert>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2, mb: 1 }}>
+                Total de respuestas: {quizStats ? quizStats.total : 0}
+              </Typography>
+              {/* (Aquí va el gráfico de barras que ya tenías) */}
+              <Button sx={{mt: 3}} variant="outlined" color="error" onClick={handleEndGame}>
+                Terminar Quiz
+              </Button>
+            </Box>
+          ) : (
+            // Vista de "Seleccionar Juego"
             <Box sx={{display: 'flex', flexDirection: 'column', gap: 2}}>
-              <FormControl fullWidth size="small">
+              <FormControl fullWidth size="small" disabled={gameInProgress !== null}>
                 <InputLabel>Selecciona un Quiz...</InputLabel>
                 <Select
                   label="Selecciona un Quiz..."
                   onChange={(e) => setSelectedQuizId(e.target.value)}
                   value={selectedQuizId || ""}
                 >
-                  {quizzes?.map(quiz => (
+                  {liveQuizzes.length === 0 && <MenuItem disabled>No hay quizzes para esta lección</MenuItem>}
+                  {liveQuizzes.map(quiz => (
                     <MenuItem key={quiz.id} value={quiz.id}>
                       {quiz.title}
                     </MenuItem>
@@ -592,55 +624,58 @@ const ProfessorPanel = ({
               <Button 
                 variant="contained"
                 onClick={handleLaunchQuiz} 
-                disabled={!selectedQuizId || websocketReadyState !== ReadyState.OPEN}
+                disabled={!selectedQuizId || websocketReadyState !== ReadyState.OPEN || gameInProgress !== null}
                 startIcon={<EmojiEventsIcon />}
               >
-                🚀 Lanzar Quiz Ahora
+                Lanzar Quiz
               </Button>
             </Box>
           )}
+        </Paper>
+      </motion.div>
 
-          {/* VISTA 2: Cargando Quizzes */}
-          {loadingQuizzes && <CircularProgress size={24} />}
-
-          {/* VISTA 3: ¡Resultados en Vivo! */}
-          {quizInProgress && (
+      {/* --- ¡NUEVO! Sección del Pilar 3B (Code Kahoot) --- */}
+      <motion.div variants={itemVariants}>
+        <Paper sx={{...glassPaperStyle(theme), p: 3, mt: 3, boxShadow: 'none', background: 'none'}}>
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+            Desafío de Código en Vivo
+          </Typography>
+          
+          {gameInProgress === 'challenge' ? (
+            // Vista de "Juego en Progreso"
             <Box>
-              <Typography variant="body1" sx={{ mb: 1, fontWeight: 600 }}>Resultados en vivo:</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Total de respuestas: {quizStats ? quizStats.total : 0}
-              </Typography>
-              
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {statsWithPercentages.length > 0 ? (
-                  statsWithPercentages.map((stat, index) => (
-                    <Box key={stat.id}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                        <Typography variant="body2">{`Opción ${String.fromCharCode(65 + index)}`}</Typography>
-                        <Typography variant="body2" sx={{fontWeight: 600}}>{`${stat.count} Votos`}</Typography>
-                      </Box>
-                      {/* El Gráfico de Barras */}
-                      <Box sx={{ width: '100%', height: '24px', bgcolor: 'rgba(255,255,255,0.1)', borderRadius: 1, overflow: 'hidden' }}>
-                        <Box sx={{
-                          width: `${stat.percentage}%`,
-                          height: '100%',
-                          bgcolor: 'primary.main',
-                          transition: 'width 0.3s ease-out'
-                        }} />
-                      </Box>
-                    </Box>
-                  ))
-                ) : (
-                  <Typography variant="body2" color="text.secondary">Esperando respuestas...</Typography>
-                )}
-              </Box>
-              
-              <Button sx={{mt: 3}} variant="outlined" color="error" onClick={() => {
-                setQuizInProgress(false);
-                setSelectedQuizId(null); // Resetea el quiz seleccionado
-                // (Podrías enviar un evento 'END_QUIZ' aquí)
-              }}>
-                Terminar Quiz
+              <Alert severity="info">¡Desafío de código en progreso!</Alert>
+              {/* (Aquí irá el ranking en vivo) */}
+              <Button sx={{mt: 3}} variant="outlined" color="error" onClick={handleEndGame}>
+                Terminar Desafío
+              </Button>
+            </Box>
+          ) : (
+            // Vista de "Seleccionar Juego"
+            <Box sx={{display: 'flex', flexDirection: 'column', gap: 2}}>
+              <FormControl fullWidth size="small" disabled={gameInProgress !== null}>
+                <InputLabel>Selecciona un Desafío...</InputLabel>
+                <Select
+                  label="Selecciona un Desafío..."
+                  onChange={(e) => setSelectedChallengeId(e.target.value)}
+                  value={selectedChallengeId || ""}
+                >
+                  {liveChallenges.length === 0 && <MenuItem disabled>No hay desafíos para esta lección</MenuItem>}
+                  {liveChallenges.map(challenge => (
+                    <MenuItem key={challenge.id} value={challenge.id}>
+                      {challenge.title}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <Button 
+                variant="contained"
+                color="secondary" // Color diferente
+                onClick={handleLaunchCodeChallenge} 
+                disabled={!selectedChallengeId || websocketReadyState !== ReadyState.OPEN || gameInProgress !== null}
+                startIcon={<TerminalIcon />}
+              >
+                Lanzar Desafío IA
               </Button>
             </Box>
           )}
@@ -736,9 +771,13 @@ function LessonPage() {
 
   const [contacts, setContacts] = useState([]);
   const [connectedUserIds, setConnectedUserIds] = useState(new Set());
-  const [quizModalData, setQuizModalData] = useState(null);
+  const [quizGameState, setQuizGameState] = useState({ view: 'hidden', data: null });
   const [quizStats, setQuizStats] = useState(null);
   const [currentXp, setCurrentXp] = useState(user?.experience_points || 0);
+  const [timerProgress, setTimerProgress] = useState(100);
+  const [selectedChoiceId, setSelectedChoiceId] = useState(null);
+  const timerRef = useRef(null);
+  const [codeSolution, setCodeSolution] = useState("");
   if (authLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
@@ -943,77 +982,155 @@ function LessonPage() {
   useEffect(() => {
     if (lastJsonMessage !== null) {
       
+      // --- 1. Lógica de Chat ---
       if (lastJsonMessage.type === 'chat_message') {
         setChatHistory(prev => [...prev, lastJsonMessage.message]);
       } 
+      
+      // --- 2. Lógica de XP (Gamificación) ---
       else if (lastJsonMessage.type === 'xp_notification') {
         console.log("XP Recibido:", lastJsonMessage);
         setSnackbarMessage(`¡${lastJsonMessage.username} ha ganado ${lastJsonMessage.points} XP!`);
         setSnackbarSeverity("success");
         setSnackbarOpen(true);
+        // Actualiza el estado de la mascota si es para mí
         if (lastJsonMessage.user_id === user.id) {
-                setCurrentXp(lastJsonMessage.total_xp);
-            }
+            setCurrentXp(lastJsonMessage.total_xp);
+        }
       }
+      
+      // --- 3. Lógica de "Pregunta de Quiz" (para Alumno y Profesor) ---
       else if (lastJsonMessage.type === 'quiz_question') {
-        if (user.role !== 'PROFESSOR') {
-              const questionData = lastJsonMessage.data;
-              console.log("¡QUIZ RECIBIDO! (Soy Alumno)", questionData);
-              // ¡Guarda la pregunta en el estado para mostrar el modal!
-              setQuizModalData(questionData);
-            } else {
-              console.log("Quiz recibido (Soy Profesor, lo ignoro)");
+        console.log("¡QUIZ_QUESTION recibido!", lastJsonMessage.data);
+            
+        // Esta lógica es para TODOS (para que el profesor vea el timer, etc.)
+        // 1. Limpia el temporizador y la selección
+        if (timerRef.current) clearInterval(timerRef.current);
+        setTimerProgress(100);
+        setSelectedChoiceId(null);
+
+        const totalTime = lastJsonMessage.data.timer || 15;
+        const updatesPerSecond = 10;
+        const totalSteps = totalTime * updatesPerSecond;
+        const stepPercentage = 100 / totalSteps;
+
+        // 2. Inicia el nuevo temporizador
+        timerRef.current = setInterval(() => {
+          setTimerProgress(prev => {
+            if (prev <= 0) {
+              clearInterval(timerRef.current);
+              return 0;
             }
+            return prev - stepPercentage;
+          });
+        }, 1000 / updatesPerSecond);
+
+        // 3. Muestra la pregunta (SOLO AL ALUMNO)
+        if (user.role !== 'PROFESSOR') {
+          setQuizGameState({ view: 'question', data: lastJsonMessage.data });
+        }
       }
-      else if (lastJsonMessage.type === 'quiz_answer_received') {
-        // (Opcional) Muestra quién ha respondido
-        console.log(`${lastJsonMessage.data.username} ha respondido.`);
+          
+      // --- 4. Lógica de "Resultado de Respuesta" (Solo Alumno) ---
+      else if (lastJsonMessage.type === 'answer_result') {
+        if (user.role !== 'PROFESSOR') {
+          setQuizGameState(prevState => ({
+            ...prevState,
+            view: lastJsonMessage.data.is_correct ? 'result_correct' : 'result_incorrect'
+          }));
+        }
       }
-      else if (lastJsonMessage.type === 'user_joined') {
-            // El objeto 'user' está anidado
-            const joinedUser = lastJsonMessage.user; 
-            if (joinedUser) {
-              console.log('Usuario conectado:', joinedUser.username);
-              // Añade el ID del 'joinedUser' al 'Set'
-              setConnectedUserIds(prevIds => new Set(prevIds).add(joinedUser.id));
+
+      // --- 5. Lógica de "Estadísticas del Quiz" (Ambos) ---
+      else if (lastJsonMessage.type === 'quiz_stats_update') {
+        console.log("Estadísticas recibidas:", lastJsonMessage.data);
+        
+        // Para el profesor: Actualiza el gráfico de barras del panel
+        if (user.role === 'PROFESSOR') {
+          setQuizStats(lastJsonMessage.data.stats);
+        }
+        // Para el alumno: Muestra la vista de "stats" en el modal
+        else {
+          setQuizGameState({ view: 'stats', data: lastJsonMessage.data });
+        }
+      }
+
+      // --- 6. Lógica de "Ranking del Quiz" (Solo Alumno) ---
+      else if (lastJsonMessage.type === 'quiz_ranking_update') {
+        console.log("Ranking recibido:", lastJsonMessage.data);
+        if (user.role !== 'PROFESSOR') {
+          setQuizGameState({ view: 'ranking', data: lastJsonMessage.data });
+        }
+      }
+
+      // --- 7. Lógica de "Prepárate" (Solo Alumno) ---
+      else if (lastJsonMessage.type === 'quiz_get_ready') {
+        if (user.role !== 'PROFESSOR') {
+          setQuizGameState({ view: 'get_ready', data: null });
+        }
+      }
+      
+      // --- 8. Lógica de "Resultados Finales" (Solo Alumno) ---
+      else if (lastJsonMessage.type === 'quiz_final_results') {
+        console.log("Resultados finales recibidos:", lastJsonMessage.data);
+        if (timerRef.current) clearInterval(timerRef.current);
+        
+        if (user.role !== 'PROFESSOR') {
+          setQuizGameState({ view: 'final_results', data: lastJsonMessage.data });
+        }
+      }
+      else if (lastJsonMessage.type === 'code_challenge_question') {
+            console.log("¡DESAFÍO DE CÓDIGO RECIBIDO!", lastJsonMessage.data);
+            setCodeSolution(lastJsonMessage.data.challenge.starter_code || "");
+            // Inicia el temporizador (similar al quiz)
+            if (timerRef.current) clearInterval(timerRef.current);
+            setTimerProgress(100);
+            
+            const totalTime = lastJsonMessage.data.timer || 300;
+            const updatesPerSecond = 1; // 1 actualización por segundo
+            const totalSteps = totalTime * updatesPerSecond;
+            const stepPercentage = 100 / totalSteps;
+
+            timerRef.current = setInterval(() => {
+              setTimerProgress(prev => {
+                if (prev <= 0) {
+                  clearInterval(timerRef.current);
+                  return 0;
+                }
+                return prev - stepPercentage;
+              });
+            }, 1000 / updatesPerSecond); // Se ejecuta 1 vez por segundo
+            
+            // Muestra la nueva vista del modal (SOLO AL ALUMNO)
+            if (user.role !== 'PROFESSOR') {
+              setQuizGameState({ view: 'code_challenge', data: lastJsonMessage.data });
             }
           }
+      // --- 9. Lógica de "Usuario se unió" (Sistema de Presencia) ---
+      else if (lastJsonMessage.type === 'user_joined') {
+        const joinedUser = lastJsonMessage.user; 
+        if (joinedUser) {
+          console.log(`[DIAGNÓSTICO] user_joined recibido:`, joinedUser);
+          setConnectedUserIds(prevIds => {
+            const newIds = new Set(prevIds).add(joinedUser.id);
+            console.log(`[DIAGNÓSTICO] Nuevo Set de Conectados:`, newIds);
+            return newIds;
+          });
+        }
+      }
 
+      // --- 10. Lógica de "Usuario se fue" (Sistema de Presencia) ---
       else if (lastJsonMessage.type === 'user_left') {
         console.log('Usuario desconectado:', lastJsonMessage.user_id);
-        // Elimina el ID del 'Set'
         setConnectedUserIds(prevIds => {
           const newIds = new Set(prevIds);
           newIds.delete(lastJsonMessage.user_id);
           return newIds;
         });
       }
-      else if (lastJsonMessage.type === 'user_joined') {
-            const joinedUser = lastJsonMessage.user;
-            if (joinedUser) {
-              // --- ¡AÑADE ESTOS LOGS! ---
-              console.log(`[DIAGNÓSTICO] user_joined recibido:`, joinedUser);
-              
-              setConnectedUserIds(prevIds => {
-                const newIds = new Set(prevIds).add(joinedUser.id);
-                
-                // --- ¡AÑADE ESTE LOG! ---
-                console.log(`[DIAGNÓSTICO] Nuevo Set de Conectados:`, newIds);
-                return newIds;
-              });
-            }
-          }
-      else if (lastJsonMessage.type === 'quiz_stats_update') {
-        const { stats } = lastJsonMessage.data;
-
-        // Solo actualiza las estadísticas si eres el profesor
-        if (user.role === 'PROFESSOR') {
-          console.log("Estadísticas de quiz recibidas:", stats);
-          setQuizStats(stats);
-        }
-      }
+      
     }
-  }, [lastJsonMessage]);
+  }, [lastJsonMessage, user.id, user.role]);
   useEffect(() => {
     // Comprueba si el estado del socket es 'OPEN' (1)
     if (readyState === ReadyState.OPEN) {
@@ -1034,24 +1151,45 @@ function LessonPage() {
     });
   };
   const handleAnswerSubmit = (questionId, choiceId) => {
-    if (readyState !== 1) { // 1 = OPEN
-      console.error("Socket no está listo para enviar respuesta.");
+    if (readyState !== 1 || selectedChoiceId) { 
+      return;
+    }
+    setSelectedChoiceId(choiceId);
+    
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+    
+    sendJsonMessage({
+      message_type: "SUBMIT_ANSWER",
+      question_id: questionId, // Pasamos el ID de la pregunta
+      choice_id: choiceId
+    });
+  };
+  const handleCodeSubmit = () => {
+    if (readyState !== 1 || !quizGameState.data) {
+      console.error("Socket no está listo o no hay datos del desafío.");
       return;
     }
     
-    // Envía la respuesta al consumer
+    // 1. Envía el código al backend
     sendJsonMessage({
-      message_type: "SUBMIT_ANSWER",
-      question_id: questionId,
-      choice_id: choiceId
+      message_type: "SUBMIT_CODE_SOLUTION", // ¡NUEVO TIPO DE MENSAJE!
+      challenge_id: quizGameState.data.challenge.id,
+      code: codeSolution // Envía el código desde el estado
     });
 
-    // Oculta el modal después de responder
-    setQuizModalData(null); 
+    // 2. Detén el temporizador del cliente
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+    
+    // 3. Muestra la vista de "esperando" (¡esta vez es 'waiting_ia'!)
+    setQuizGameState(prevState => ({ ...prevState, view: 'waiting_ia' }));
   };
   // --- Lógica para el Panel de Calificaciones (Funcional) ---
   const pendingTasks = [];
-  if (assignment && !submission) {
+  if (assignment && !submission) {    
     pendingTasks.push({ 
       id: `assignment-${assignment.id}`,
       title: assignment.title,
@@ -1407,6 +1545,7 @@ function LessonPage() {
                             contacts={contacts}
                             onGiveXp={handleGiveXp}
                             courseId={courseId}
+                            lessonId={lesson.id}
                             connectedIds={connectedUserIds}
                             sendJsonMessage={sendJsonMessage}
                             websocketReadyState={readyState}
@@ -1474,6 +1613,7 @@ function LessonPage() {
                                     <Tooltip title="Recursos"><Tab icon={<CloudDownloadIcon />} aria-label="Recursos" sx={{minWidth: 'auto'}} /></Tooltip>
                                     <Tooltip title="Entregables"><Tab icon={<AssignmentTurnedInIcon />} aria-label="Entregables" sx={{minWidth: 'auto'}} /></Tooltip>
                                     <Tooltip title="Mascota"><Tab icon={<PetsIcon />} aria-label="Mascota" sx={{minWidth: 'auto'}} /></Tooltip>
+                                    <Tooltip title="Práctica IA"><Tab icon={<TerminalIcon />} aria-label="Práctica IA" sx={{minWidth: 'auto'}} /></Tooltip>
                                 </Tabs>
                             </Box>
 
@@ -1635,6 +1775,19 @@ function LessonPage() {
                                     </Button>
                                   </Box>
                                 </TabPanel>
+                                <TabPanel value={sideTabValue} index={5} theme={theme} enableScroll={false}>
+                                <CodeChallengePanel 
+                                  theme={theme}
+                                  lessonId={lesson.id}
+                                  onNotify={(msg, severity) => { 
+                                    setSnackbarMessage(msg);
+                                    setSnackbarSeverity(severity || "success");
+                                    setSnackbarOpen(true);
+                                  }}
+                                  // Pasa la función para actualizar el XP de la mascota
+                                  onXpEarned={(newTotalXp) => setCurrentXp(newTotalXp)}
+                                />
+                                </TabPanel>
                                 {/* --- FIN DEL REEMPLAZO --- */}
                             </Box>
                         </Paper>
@@ -1662,36 +1815,168 @@ function LessonPage() {
             )}
         </Box>
       </Box> {/* === FIN DEL CAMBIO A FLEXBOX === */}
+      {/* --- ¡REEMPLAZA TU MODAL CON ESTE CÓDIGO (VERSIÓN ANIDADA CORRECTA)! --- */}
+      <Modal
+        open={quizGameState.view !== 'hidden'}
+        sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      >
+        <Paper sx={{ p: 4, width: '90%', maxWidth: 500, outline: 'none', textAlign: 'center' }}>
 
-      {quizModalData && (
-        <Modal
-          open={true}
-          // Opcional: onClose={() => setQuizModalData(null)}
-          sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        >
-          <Paper sx={{ p: 4, width: '90%', maxWidth: 500, outline: 'none' }}>
-            <Typography variant="h5" color="primary" gutterBottom>
-              ¡Desafío Rápido!
-            </Typography>
-            <Typography variant="h6" sx={{ my: 2, fontWeight: 600 }}>
-              {quizModalData.question_text}
-            </Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 3 }}>
-              {quizModalData.choices?.map(choice => (
-                <Button
-                  key={choice.id}
-                  variant="outlined"
-                  size="large"
-                  onClick={() => handleAnswerSubmit(quizModalData.question_id, choice.id)}
-                  sx={{ justifyContent: 'flex-start', p: 1.5 }}
-                >
-                  {choice.text}
-                </Button>
-              ))}
+          {/* === VISTA 1: PREGUNTA (CÓDIGO CORREGIDO) === */}
+          {quizGameState.view === 'question' && quizGameState.data && (
+            <>
+              {/* --- Barra Regresiva --- */}
+              <LinearProgress 
+                variant="determinate" 
+                value={timerProgress} 
+                sx={{ height: 10, borderRadius: 5, mb: 2, transition: 'transform 0.1s linear' }} 
+              />
+              
+              <Typography variant="h5" color="primary" gutterBottom>
+                {/* ¡CORREGIDO! Lee 'data.question_number' */}
+                ¡Desafío Rápido! ({quizGameState.data.question_number}/{quizGameState.data.total_questions})
+              </Typography>
+              <Typography variant="h6" sx={{ my: 2, fontWeight: 600 }}>
+                {/* ¡CORREGIDO! Lee 'data.question.text' */}
+                {quizGameState.data.question.text}
+              </Typography>
+              
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 3 }}>
+                {/* ¡CORREGIDO! Lee 'data.question.choices' */}
+                {quizGameState.data.question.choices.map(choice => (
+                  <Button
+                    key={choice.id}
+                    variant={selectedChoiceId === choice.id ? 'contained' : 'outlined'}
+                    disabled={selectedChoiceId !== null} 
+                    // ¡CORREGIDO! Lee 'data.question.id'
+                    onClick={() => handleAnswerSubmit(quizGameState.data.question.id, choice.id)}
+                    sx={{ justifyContent: 'flex-start', p: 1.5 }}
+                  >
+                    {choice.text}
+                  </Button>
+                ))}
+              </Box>
+            </>
+          )}
+          
+          {/* === VISTA 2: FEEDBACK CORRECTO === */}
+          {(quizGameState.view === 'result_correct') && (
+            <Box>
+              <CheckCircleIcon sx={{ fontSize: 80, color: 'success.main', mb: 2 }} />
+              <Typography variant="h4" sx={{ fontWeight: 600 }}>¡Correcto!</Typography>
+              <Typography color="text.secondary">¡Buen trabajo!</Typography>
             </Box>
-          </Paper>
-        </Modal>
-      )}
+          )}
+          
+          {/* === VISTA 3: FEEDBACK INCORRECTO === */}
+          {(quizGameState.view === 'result_incorrect') && (
+            <Box>
+              <ErrorOutlineIcon sx={{ fontSize: 80, color: 'error.main', mb: 2 }} />
+              <Typography variant="h4" sx={{ fontWeight: 600 }}>¡Incorrecto!</Typography>
+              <Typography color="text.secondary">¡Mejor suerte la próxima!</Typography>
+            </Box>
+          )}
+
+          {/* === VISTA 4: GRÁFICO DE BARRAS (STATS) === */}
+          {quizGameState.view === 'stats' && quizGameState.data && (
+             <Box>
+              <Typography variant="h5" color="primary" gutterBottom>Resultados de la Pregunta</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Total de respuestas: {quizGameState.data.stats.total}
+              </Typography>
+              {/* (Aquí iría el gráfico de barras) */}
+            </Box>
+          )}
+          
+          {/* === VISTA 5: RANKING (Parcial o Final) === */}
+          {(quizGameState.view === 'ranking' || quizGameState.view === 'final_results') && quizGameState.data && (
+            <Box>
+              <Typography variant="h5" color={quizGameState.view === 'final_results' ? "success.main" : "primary"} gutterBottom>
+                {quizGameState.view === 'final_results' ? "¡Resultados Finales!" : "Ranking"}
+              </Typography>
+              <List dense sx={{ mt: 2, textAlign: 'left' }}>
+                {/* ¡CORREGIDO! Lee 'data.ranking.map' */}
+                {quizGameState.data.ranking.map((player, index) => (
+                  <ListItem key={index} sx={{ bgcolor: index < 3 ? 'action.hover' : 'transparent', borderRadius: 1, mb: 0.5 }}>
+                    <ListItemIcon sx={{fontSize: '1.5rem'}}>
+                      {index === 0 && '🥇'} {index === 1 && '🥈'} {index === 2 && '🥉'} {index > 2 && `${index + 1}.`}
+                    </ListItemIcon>
+                    <ListItemText primary={player.username} sx={{ fontWeight: 600 }} />
+                    <Typography variant="h6" color="primary">{player.score} pts</Typography>
+                  </ListItem>
+                ))}
+              </List>
+              {quizGameState.view === 'final_results' && (
+                <Button variant="contained" fullWidth sx={{ mt: 3 }} onClick={() => setQuizGameState({ view: 'hidden', data: null })}>
+                  Cerrar
+                </Button>
+              )}
+            </Box>
+          )}
+          
+          {/* === VISTA 6: PREPÁRATE === */}
+          {quizGameState.view === 'get_ready' && (
+            <Box>
+              <CircularProgress sx={{ mb: 2 }} />
+              <Typography variant="h5" sx={{ fontWeight: 600 }}>¡Prepárate!</Typography>
+              <Typography color="text.secondary">La siguiente pregunta está por comenzar...</Typography>
+            </Box>
+          )}
+          {quizGameState.view === 'code_challenge' && quizGameState.data && (
+            <Box sx={{ textAlign: 'left' }}>
+              {/* --- Barra Regresiva --- */}
+              <LinearProgress 
+                variant="determinate" 
+                value={timerProgress} 
+                color="secondary"
+                sx={{ height: 10, borderRadius: 5, mb: 2, transition: 'transform 1s linear' }} 
+              />
+              
+              <Typography variant="h5" color="secondary" gutterBottom>
+                ¡Desafío de Código en Vivo!
+              </Typography>
+              <Typography variant="h6" sx={{ my: 2, fontWeight: 600 }}>
+                {quizGameState.data.challenge.title}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, whiteSpace: 'pre-wrap' }}>
+                {quizGameState.data.challenge.description}
+              </Typography>
+              
+              {/* --- ¡TEXTFIELD CONECTADO! --- */}
+              <TextField
+                fullWidth
+                multiline
+                rows={10}
+                variant="filled"
+                label="Escribe tu solución aquí..."
+                value={codeSolution} // <-- Conectado al estado
+                onChange={(e) => setCodeSolution(e.target.value)} // <-- Conectado al estado
+                sx={{ mb: 2, '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
+              />
+              
+              {/* --- ¡BOTÓN CONECTADO! --- */}
+              <Button 
+                variant="contained" 
+                color="secondary" 
+                fullWidth
+                onClick={handleCodeSubmit} // <-- ¡Conectado al handler!
+              >
+                Enviar Solución
+              </Button>
+            </Box>
+          )}
+
+          {/* --- ¡NUEVA VISTA DE ESPERA DE IA! --- */}
+          {(quizGameState.view === 'waiting_ia') && (
+            <Box>
+              <CircularProgress color="secondary" sx={{ mb: 2 }} />
+              <Typography variant="h5" sx={{ fontWeight: 600 }}>Evaluando tu código...</Typography>
+              <Typography color="text.secondary">La IA está revisando tu solución. ¡Un momento!</Typography>
+            </Box>
+          )}
+        </Paper>
+      </Modal>
+
       {/* --- ¡Snackbar AÑADIDO! --- */}
       <Snackbar
         open={snackbarOpen}

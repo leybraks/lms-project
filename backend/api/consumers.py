@@ -3,11 +3,18 @@ import json # <-- ¡Importación que faltaba!
 from channels.generic.websocket import AsyncWebsocketConsumer
 import asyncio
 from channels.db import database_sync_to_async
-from .models import Lesson, Message, Conversation, User, Enrollment,Quiz, Question, Choice # <-- ¡Importa User!
-from .serializers import MessageSerializer, UserSerializer
+from .models import Lesson, Message, Conversation, User, Enrollment,Quiz, Question, Choice,LiveCodeChallenge,CodeChallenge # <-- ¡Importa User!
+from .serializers import MessageSerializer, UserSerializer,LiveCodeChallengeSerializer
 from django.db.models import F
 from django.core.cache import cache
+from asgiref.sync import async_to_sync
+import google.generativeai as genai
+from django.conf import settings
 # (User = get_user_model() no es necesario si lo importamos directamente)
+try:
+    genai.configure(api_key=settings.GEMINI_API_KEY)
+except Exception as e:
+    print(f"ADVERTENCIA (Consumer): No se pudo configurar la API de Gemini. {e}")
 
 class ChatConsumer(AsyncWebsocketConsumer):
     """
@@ -160,6 +167,23 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     }
                 }
             )
+        elif message_type == 'START_CODE_CHALLENGE':
+            print(f"[CONSUMER LOG] Detectado: START_CODE_CHALLENGE")
+            if not self.user.role == 'PROFESSOR': return
+            
+            challenge_id = data.get('challenge_id')
+            if not challenge_id: return
+            
+            # Llama a una nueva función para iniciar el desafío de código
+            await self.start_code_game(challenge_id)
+        elif message_type == 'SUBMIT_CODE_SOLUTION':
+            print(f"[CONSUMER LOG] Detectado: SUBMIT_CODE_SOLUTION")
+            challenge_id = data.get('challenge_id')
+            user_code = data.get('code', '')
+            
+            # Llama a un nuevo helper ASÍNCRONO
+            await self.handle_code_submission(challenge_id, user_code, self.user)
+        # --- FIN DEL BLOQUE NUEVO ---
         else:
             print(f"[CONSUMER LOG] ADVERTENCIA: Mensaje tipo '{message_type}' no reconocido.")
 
@@ -242,7 +266,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.send_next_question()
 
     async def send_next_question(self):
-        """ Envía la siguiente pregunta o termina el juego. """
+        """
+        Envía la siguiente pregunta del estado del juego o termina el juego.
+        """
         game_state = cache.get(self.game_cache_key)
         if not game_state: return
 
@@ -251,6 +277,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if index < len(game_state["questions"]):
             question = game_state["questions"][index]
             
+            # Resetea las respuestas de la pregunta actual
             game_state["current_question_answers"] = {}
             cache.set(self.game_cache_key, game_state, timeout=3600)
 
@@ -269,16 +296,21 @@ class ChatConsumer(AsyncWebsocketConsumer):
             )
             
             # ¡Inicia el temporizador!
-            await asyncio.sleep(15)
+            # Después de 15s, llama a 'end_question_round'
+            await asyncio.sleep(15) 
             
-            # Cuando el tiempo se acaba, muestra el ranking
-            await self.show_ranking()
+            # --- ¡CAMBIO IMPORTANTE! ---
+            # 'show_ranking' se ha renombrado a 'end_question_round'
+            await self.end_question_round() 
             
         else:
+            # ¡Se acabaron las preguntas!
             await self.end_game()
 
     async def record_answer(self, question_id, choice_id, user):
-        """ Registra la respuesta de un alumno y actualiza su puntaje. """
+        """
+        Registra la respuesta de un alumno Y le da feedback inmediato.
+        """
         game_state = cache.get(self.game_cache_key)
         if not game_state: return
         
@@ -295,6 +327,17 @@ class ChatConsumer(AsyncWebsocketConsumer):
             
         is_correct = await self.check_answer_correct(choice_id)
         
+        # --- ¡NUEVO! Feedback Inmediato ---
+        # Envía un mensaje PRIVADO solo a este usuario
+        await self.send(text_data=json.dumps({
+            'type': 'answer_result',
+            'data': {
+                'is_correct': is_correct,
+                'choice_id': choice_id
+            }
+        }))
+        # --- FIN DEL FEEDBACK ---
+        
         points = 0
         if is_correct:
             points = max(100, 1000 - (len(game_state["current_question_answers"]) * 50))
@@ -306,33 +349,62 @@ class ChatConsumer(AsyncWebsocketConsumer):
         game_state["current_question_answers"][user.id] = True
         
         cache.set(self.game_cache_key, game_state, timeout=3600)
+
+    async def end_question_round(self):
+        """
+        Se ejecuta cuando el temporizador de 15s se acaba.
+        Controla el ritmo: Estadísticas -> Ranking -> Siguiente Pregunta.
+        """
+        game_state = cache.get(self.game_cache_key)
+        if not game_state: return
         
-        sorted_ranking = sorted(
-            game_state["ranking"].values(), 
-            key=lambda x: x['score'], 
-            reverse=True
-        )
+        print(f"Ronda {game_state['current_question_index'] + 1} terminada.")
+
+        # --- MEJORA 3: Enviar Gráfico de Barras a TODOS ---
+        # (Esto arregla tu bug)
+        stats = {
+            'choices': { choice['id']: 0 for choice in game_state["questions"][game_state["current_question_index"]]["choices"] },
+            'total': len(game_state["current_question_answers"])
+        }
+        # (Lógica para contar votos - ¡necesitamos mejorar 'record_answer' para esto!)
+        # (Por ahora, solo enviamos el total)
         
         await self.channel_layer.group_send(
             self.room_group_name,
             {
-                'type': 'quiz_ranking_update',
+                'type': 'quiz_stats_update',
                 'data': {
-                    'ranking': sorted_ranking,
-                    'is_final': False
+                    'stats': stats, # (Datos del gráfico de barras)
+                    'question_id': game_state["questions"][game_state["current_question_index"]]['id']
                 }
             }
         )
+        await asyncio.sleep(5) # 5 segundos para ver el gráfico
 
-    async def show_ranking(self):
-        """ Muestra el ranking y pasa a la siguiente pregunta. """
-        game_state = cache.get(self.game_cache_key)
-        if not game_state: return
-        
+        # --- MEJORA 2: Enviar Ranking a TODOS ---
+        sorted_ranking = sorted(game_state["ranking"].values(), key=lambda x: x['score'], reverse=True)
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'quiz_ranking_update',
+                'data': { 'ranking': sorted_ranking, 'is_final': False }
+            }
+        )
+        await asyncio.sleep(3) # 3 segundos para ver el ranking
+
+        # --- MEJORA 2: Enviar "Prepárate" ---
         game_state["current_question_index"] += 1
         cache.set(self.game_cache_key, game_state, timeout=3600)
         
-        await self.send_next_question()
+        if game_state["current_question_index"] < len(game_state["questions"]):
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                { 'type': 'quiz_get_ready' }
+            )
+            await asyncio.sleep(3) # 3 segundos para "prepárate"
+            await self.send_next_question() # Llamar a la siguiente
+        else:
+            await self.end_game() # Se acabaron las preguntas
 
     async def end_game(self):
         """ Termina el juego, otorga puntos de mascota y muestra el ranking final. """
@@ -364,7 +436,74 @@ class ChatConsumer(AsyncWebsocketConsumer):
         )
         
         cache.delete(self.game_cache_key)
+    async def code_challenge_question(self, event):
+        """
+        Handler: Envía el desafío de código a todos los alumnos.
+        """
+        print(f"[CONSUMER LOG] Retransmitiendo 'code_challenge_question'")
+        await self.send(text_data=json.dumps({
+            'type': 'code_challenge_question',
+            'data': event['data'] # { challenge: ..., timer: 300 }
+        }))
 
+    async def start_code_game(self, challenge_id):
+        """
+        Carga el desafío de código, lo envía a todos
+        E INICIA EL TEMPORIZADOR.
+        """
+        challenge_data = await self.get_live_code_challenge(challenge_id)
+        if not challenge_data:
+            print(f"Error: No se encontró el LiveCodeChallenge {challenge_id}")
+            return
+            
+        # Prepara el "estado de juego" (similar al quiz)
+        game_state = {
+            "quiz_id": f"code_{challenge_id}", # ID de juego único
+            "current_question_index": 0, # Solo 1 pregunta
+            "questions": [challenge_data], # Solo 1 desafío
+            "ranking": {}, # Ranking vacío
+            "current_question_answers": {} # Quién ha respondido
+        }
+        
+        # Guarda el estado del juego en el caché
+        self.game_cache_key = f"live_quiz_{self.room_group_name}" # Reutiliza la clave del quiz
+        cache.set(self.game_cache_key, game_state, timeout=3600)
+        
+        print(f"Enviando Desafío de Código {challenge_id}")
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'code_challenge_question',
+                'data': {
+                    'challenge': challenge_data,
+                    'timer': 300 # 300 segundos (5 minutos)
+                }
+            }
+        )
+        
+        # --- ¡LÓGICA DEL TEMPORIZADOR AÑADIDA! ---
+        await asyncio.sleep(300) # Espera 5 minutos
+        
+        # Cuando el tiempo se acaba, termina el juego
+        # (Reutilizamos la función 'end_game' del quiz)
+        await self.end_game()
+
+
+    @database_sync_to_async
+    def get_live_code_challenge(self, challenge_id):
+        """
+        Obtiene un LiveCodeChallenge y lo serializa.
+        No envía la 'solución'.
+        """
+        try:
+            challenge = LiveCodeChallenge.objects.get(id=challenge_id)
+            # Usamos el serializer para controlar qué datos enviamos
+            # (¡Importante! El serializer NO debe enviar el campo 'solution')
+            serializer = LiveCodeChallengeSerializer(challenge)
+            return serializer.data
+        except Exception as e:
+            print(f"Error al obtener LiveCodeChallenge: {e}")
+            return None
     # ====================================================================
     # --- FUNCIONES DE BASE DE DATOS (Seguras) ---
     # ====================================================================
@@ -458,6 +597,190 @@ class ChatConsumer(AsyncWebsocketConsumer):
             user=self.user,
             course=self.lesson.module.course
         ).exists()
+    async def answer_result(self, event):
+        """ Handler para: 'answer_result' (PRIVADO) """
+        # Este tipo de evento se envía con 'self.send'
+        # Así que no necesitamos un handler, ¡se envía directo!
+        pass # (Dejamos el comentario como referencia)
+
+    async def quiz_get_ready(self, event):
+        """ Handler para: 'quiz_get_ready' """
+        await self.send(text_data=json.dumps({
+            'type': 'quiz_get_ready'
+        }))
+    
+    @database_sync_to_async
+    def evaluate_code_solution(self, challenge_id, user_code, user):
+        """
+        Llama a la IA de Gemini para evaluar el código
+        Y LUEGO actualiza el ranking del juego.
+        """
+        try:
+            challenge = LiveCodeChallenge.objects.get(id=challenge_id)
+            
+            # 1. Llama a la IA (igual que en views.py)
+            prompt = f"""
+            Eres un tutor de programación experto. Evalúa este código.
+            PROBLEMA: {challenge.description}
+            SOLUCIÓN DEL ALUMNO:
+            ```python
+            {user_code}
+            ```
+            SOLUCIÓN ÓPTIMA:
+            ```python
+            {challenge.solution}
+            ```
+            Responde SOLO con un JSON: {{ "is_correct": [true o false] }}
+            """
+            
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            response = model.generate_content(prompt)
+            json_response = response.text.strip().replace("```json", "").replace("```", "")
+            ia_data = json.loads(json_response)
+            
+            is_correct = ia_data.get('is_correct', False)
+            
+            # 2. Envía el feedback PRIVADO al alumno
+            # (Usamos 'async_to_sync' porque estamos en una función de BBDD)
+            async_to_sync(self.send)(text_data=json.dumps({
+                'type': 'answer_result',
+                'data': { 'is_correct': is_correct, 'choice_id': None }
+            }))
+
+            # 3. Si es correcto, actualiza el ranking
+            if is_correct:
+                game_state = cache.get(self.game_cache_key)
+                if not game_state: return
+
+                # Evita respuestas duplicadas
+                if user.id in game_state["current_question_answers"]:
+                    return
+                
+                # Calcula puntos por velocidad
+                points = max(100, 1000 - (len(game_state["current_question_answers"]) * 50))
+                
+                if user.id not in game_state["ranking"]:
+                    game_state["ranking"][user.id] = { "username": user.username, "score": 0 }
+                
+                game_state["ranking"][user.id]["score"] += points
+                game_state["current_question_answers"][user.id] = True
+                
+                cache.set(self.game_cache_key, game_state, timeout=3600)
+                
+                # 4. Retransmite el ranking a TODOS
+                sorted_ranking = sorted(game_state["ranking"].values(), key=lambda x: x['score'], reverse=True)
+                async_to_sync(self.channel_layer.group_send)(
+                    self.room_group_name,
+                    {
+                        'type': 'quiz_ranking_update',
+                        'data': { 'ranking': sorted_ranking, 'is_final': False }
+                    }
+                )
+
+        except Exception as e:
+            print(f"ERROR EN LA EVALUACIÓN DE IA: {e}")
+            # Envía un error de vuelta al alumno
+            async_to_sync(self.send)(text_data=json.dumps({
+                'type': 'answer_result',
+                'data': { 'is_correct': False }
+            }))
+    async def handle_code_submission(self, challenge_id, user_code, user):
+        """
+        Paso 1 (Async): Maneja el flujo de evaluación de código.
+        """
+        try:
+            # 2. Llama a la parte SÍNCRONA (IA) y espera el resultado
+            print(f"[CONSUMER] Enviando código de {user.username} a la IA...")
+            ia_result = await self.run_ia_evaluation(challenge_id, user_code)
+            
+            is_correct = ia_result.get('is_correct', False)
+
+            # 3. Envía el feedback PRIVADO (¡Ahora es async!)
+            await self.send(text_data=json.dumps({
+                'type': 'answer_result',
+                'data': { 'is_correct': is_correct, 'choice_id': None }
+            }))
+            
+            print(f"[CONSUMER] Feedback enviado a {user.username}: {'Correcto' if is_correct else 'Incorrecto'}")
+
+            # 4. Si es correcto, actualiza el ranking (¡Ahora es async!)
+            if is_correct:
+                await self.update_code_ranking(user, challenge_id)
+
+        except Exception as e:
+            print(f"ERROR GRANDE en handle_code_submission: {e}")
+            await self.send(text_data=json.dumps({
+                'type': 'answer_result',
+                'data': { 'is_correct': False }
+            }))
+
+    # 2. La Tarea SÍNCRONA (La "IA" - Marcada como @database_sync_to_async)
+    @database_sync_to_async
+    def run_ia_evaluation(self, challenge_id, user_code):
+        """
+        Paso 2 (Sync): Ejecuta la IA y la BBDD en un hilo síncrono.
+        """
+        try:
+            # (Asegúrate de que el modelo 'LiveCodeChallenge' esté importado)
+            challenge = LiveCodeChallenge.objects.get(id=challenge_id)
+            
+            prompt = f"""
+            Eres un tutor de programación experto. Evalúa este código.
+            PROBLEMA: {challenge.description}
+            SOLUCIÓN DEL ALUMNO:
+            ```python
+            {user_code}
+            ```
+            SOLUCIÓN ÓPTIMA:
+            ```python
+            {challenge.solution}
+            ```
+            Responde SOLO con un JSON: {{ "is_correct": [true o false] }}
+            """
+            
+            # (Asegúrate de que 'genai' esté importado)
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            response = model.generate_content(prompt)
+            json_response = response.text.strip().replace("```json", "").replace("```", "")
+            ia_data = json.loads(json_response)
+            
+            return ia_data # Devuelve el resultado al helper async
+            
+        except Exception as e:
+            print(f"ERROR DENTRO DE run_ia_evaluation: {e}")
+            return { "is_correct": False } # Devuelve un error
+
+    # 3. El Helper ASÍNCRONO (El "Ranking")
+    async def update_code_ranking(self, user, challenge_id):
+        """
+        Paso 3 (Async): Actualiza el caché (que es async)
+        """
+        game_state = cache.get(self.game_cache_key)
+        if not game_state: return
+        if user.id in game_state["current_question_answers"]: return
+
+        print(f"[CONSUMER] Actualizando ranking para {user.username}")
+        
+        points = max(100, 1000 - (len(game_state["current_question_answers"]) * 50))
+        
+        if user.id not in game_state["ranking"]:
+            game_state["ranking"][user.id] = { "username": user.username, "score": 0 }
+        
+        game_state["ranking"][user.id]["score"] += points
+        game_state["current_question_answers"][user.id] = True
+        
+        cache.set(self.game_cache_key, game_state, timeout=3600)
+        
+        sorted_ranking = sorted(game_state["ranking"].values(), key=lambda x: x['score'], reverse=True)
+        
+        # Retransmite el ranking a TODOS
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'quiz_ranking_update',
+                'data': { 'ranking': sorted_ranking, 'is_final': False }
+            }
+        )
 
 
 class InboxConsumer(AsyncWebsocketConsumer):

@@ -295,12 +295,12 @@ class Quiz(models.Model):
     )
     
     # Un Quiz en Vivo pertenece a un Curso (en general)
-    course = models.ForeignKey(
-        Course,
+    lesson = models.ForeignKey(
+        Lesson,
         on_delete=models.CASCADE,
-        related_name='live_quizzes',
-        null=True, 
-        blank=True 
+        related_name='live_quizzes', # Una lección puede tener muchos quizzes en vivo
+        null=True,
+        blank=True
     )
 
     # --- ¡IMPORTANTE: ELIMINA EL BLOQUE DE CÓDIGO QUE ESTABA AQUÍ! ---
@@ -611,3 +611,79 @@ class ReadReceipt(models.Model):
 
     def __str__(self):
         return f"{self.user.username} leyó {self.conversation.name}"
+    
+# ====================================================================
+# 20. NUEVO MODELO: Desafío de Código (Para el Pilar 3: IA)
+# ====================================================================
+class CodeChallenge(models.Model):
+    """
+    Un único desafío de código (práctica) asociado a una lección,
+    que será evaluado por la IA.
+    """
+    lesson = models.ForeignKey(
+        Lesson,
+        on_delete=models.CASCADE,
+        related_name='code_challenges' # Permite a Lesson encontrar sus desafíos
+    )
+    title = models.CharField(
+        max_length=200, 
+        default="Desafío de Código"
+    )
+    description = models.TextField(
+        help_text="La descripción del problema o las instrucciones."
+    )
+    # (Opcional) Código inicial que se le muestra al alumno
+    starter_code = models.TextField(
+        blank=True,
+        null=True,
+        help_text="El código base que el alumno verá en el editor."
+    )
+    # (¡Importante!) La solución, para que la IA la use como referencia
+    solution = models.TextField(
+        blank=True,
+        null=True,
+        help_text="La solución óptima (la IA la usará para comparar)."
+    )
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f'Desafío: {self.title} (Lección: {self.lesson.title})'
+    
+# ====================================================================
+# 21. NUEVO MODELO: Desafío de Código EN VIVO (Para el Pilar 3B)
+# ====================================================================
+class LiveCodeChallenge(models.Model):
+    """
+    Un único desafío de código EN VIVO (tipo Kahoot) asociado a un 
+    curso general, no a una lección.
+    """
+    lesson = models.ForeignKey(
+        Lesson,
+        on_delete=models.CASCADE,
+        related_name='live_code_challenges', # Una lección puede tener muchos
+        null=True, # Lo hacemos opcional por si acaso
+        blank=True
+    )
+    title = models.CharField(
+        max_length=200, 
+        default="Desafío de Código en Vivo"
+    )
+    description = models.TextField(
+        help_text="La descripción del problema o las instrucciones."
+    )
+    starter_code = models.TextField(
+        blank=True,
+        null=True,
+        help_text="El código base que el alumno verá en el editor."
+    )
+    # ¡Importante! La solución para que la IA la use como referencia
+    solution = models.TextField(
+        help_text="La solución óptima (la IA la usará para comparar)."
+    )
+
+    def __str__(self):
+        lesson_title = self.lesson.title if self.lesson else "Sin Lección Asignada"
+        return f'Desafío en Vivo: {self.title} (Lección: {lesson_title})'

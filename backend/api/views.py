@@ -19,9 +19,15 @@ from django.core.exceptions import PermissionDenied
 import requests
 from django.db import transaction
 from rest_framework.pagination import PageNumberPagination
+import google.generativeai as genai
+from django.conf import settings
+try:
+    genai.configure(api_key=settings.GEMINI_API_KEY)
+except Exception as e:
+    print(f"ADVERTENCIA: No se pudo configurar la API de Gemini. {e}")
 # Imports de Modelos y Serializers de tu app
-from .models import Course, Enrollment, Lesson, LessonCompletion, Assignment, Submission, Quiz, User,Conversation, Message,LessonNote,ReadReceipt
-from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer, AssignmentSerializer, SubmissionSerializer, QuizSerializer,ConversationListSerializer,MessageSerializer, MessageCreateSerializer, LessonNoteSerializer, GradedItemSerializer,ReadReceiptSerializer,StudentListSerializer, Question, Choice
+from .models import Course, Enrollment, Lesson, LessonCompletion, Assignment, Submission, Quiz, User,Conversation, Message,LessonNote,ReadReceipt,CodeChallenge,Module,LiveCodeChallenge
+from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer, AssignmentSerializer, SubmissionSerializer, QuizSerializer,ConversationListSerializer,MessageSerializer, MessageCreateSerializer, LessonNoteSerializer, GradedItemSerializer,ReadReceiptSerializer,StudentListSerializer, Question, Choice,CodeChallengeSerializer,ModuleSerializer,ModuleChallengeSerializer,LiveCodeChallengeSerializer
 
 # ====================================================================
 # 1. Vistas de Cursos
@@ -979,73 +985,274 @@ def get_course_quizzes(request, course_id):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-@transaction.atomic # <-- ¡Importante! Si algo falla, no se guarda nada.
-def create_live_quiz(request, course_id):
+@transaction.atomic
+def create_live_quiz(request, lesson_id):
     """
-    Crea un nuevo Quiz de tipo 'LIVE' con todas sus preguntas
-    y opciones anidadas.
-
-    Espera un JSON como:
-    {
-        "title": "Mi nuevo Quiz en Vivo",
-        "questions": [
-            {
-                "text": "¿Pregunta 1?",
-                "choices": [
-                    { "text": "Opción A", "is_correct": false },
-                    { "text": "Opción B", "is_correct": true }
-                ]
-            },
-            { ... }
-        ]
-    }
+    Crea un nuevo Quiz de tipo 'LIVE' vinculado a una LECCIÓN.
     """
     if not request.user.role == 'PROFESSOR':
         return Response({'error': 'No tienes permiso'}, status=status.HTTP_403_FORBIDDEN)
 
     try:
-        course = Course.objects.get(id=course_id)
+        lesson = Lesson.objects.get(id=lesson_id) # <-- ¡CAMBIO! Usa Lesson
         data = request.data
 
         # 1. Crear el Quiz principal
         live_quiz = Quiz.objects.create(
-            course=course,
-            quiz_type='LIVE', # <-- ¡Lo marcamos como 'LIVE'!
+            lesson=lesson, # <-- ¡CAMBIO! Vinculado a Lesson
+            quiz_type='LIVE',
             title=data.get('title', 'Nuevo Quiz en Vivo')
-            # (Dejamos 'module' en null)
         )
 
-        # 2. Iterar sobre las preguntas anidadas
+        # 2. Iterar sobre las preguntas
         questions_data = data.get('questions', [])
         for q_order, question_data in enumerate(questions_data):
-
-            # Crea la Pregunta
             question = Question.objects.create(
                 quiz=live_quiz,
                 text=question_data.get('text', 'Sin texto'),
                 order=q_order
             )
 
-            # 3. Iterar sobre las opciones anidadas
+            # 3. Iterar sobre las opciones
             choices_data = question_data.get('choices', [])
             for choice_data in choices_data:
-
-                # Crea la Opción
                 Choice.objects.create(
                     question=question,
                     text=choice_data.get('text', 'Sin texto'),
                     is_correct=choice_data.get('is_correct', False)
                 )
 
-        # Devuelve el quiz recién creado (opcional, pero útil)
         serializer = QuizSerializer(live_quiz)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    except Course.DoesNotExist:
-        return Response({'error': 'Curso no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+    except Lesson.DoesNotExist: # <-- ¡CAMBIO!
+        return Response({'error': 'Lección no encontrada'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
-        # Si algo falla, @transaction.atomic revierte todos los cambios
-        return Response({'error': f'Error creando el quiz: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': f'Error creando el quiz: {str(e)}'}, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_lesson_challenges(request, lesson_id):
+    """
+    Obtiene todos los desafíos de código para una lección específica.
+    """
+    try:
+        challenges = CodeChallenge.objects.filter(lesson_id=lesson_id)
+        serializer = CodeChallengeSerializer(challenges, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def submit_challenge_solution(request, challenge_id):
+    """
+    Recibe la solución de un alumno, la evalúa con IA y devuelve feedback.
+    """
+    try:
+        challenge = CodeChallenge.objects.get(id=challenge_id)
+        user_code = request.data.get('code', '')
+
+        if not user_code:
+            return Response({'error': 'No se envió código.'}, status=400)
+
+        # --- ¡AQUÍ ESTÁ LA MAGIA DE LA IA! ---
+
+        # 1. Prepara el "prompt" para la IA
+        # (Este es el prompt que te sugerí que usarías, ¡ahora lo estamos implementando!)
+        prompt = f"""
+        Eres un tutor de programación experto. Un alumno ha enviado una solución
+        para un desafío de código.
+
+        EL PROBLEMA:
+        {challenge.description}
+
+        LA SOLUCIÓN DEL ALUMNO:
+        ```python
+        {user_code}
+        ```
+
+        LA SOLUCIÓN ÓPTIMA (para tu referencia):
+        ```python
+        {challenge.solution}
+        ```
+
+        Por favor, evalúa la solución del alumno y responde en formato JSON
+        con la siguiente estructura:
+        {{
+          "is_correct": [true o false, basado en si el código resuelve el problema],
+          "feedback": [Un comentario breve y amable sobre el código del alumno],
+          "code_review": [El código original del alumno, pero con comentarios 
+                          inline (ej. # ¡Buen trabajo!) explicando los errores 
+                          o mejoras. Si es perfecto, solo pon un comentario 
+                          positivo.]
+        }}
+        """
+
+        # 2. Llama a la API de Gemini
+        model = genai.GenerativeModel('gemini-pro')
+        response = model.generate_content(prompt)
+
+        # Limpia la respuesta de la IA (quitando los ```json ... ```)
+        json_response = response.text.strip().replace("```json", "").replace("```", "")
+        ia_data = json.loads(json_response)
+
+        points_awarded = 0
+        if ia_data.get('is_correct', False):
+            points_awarded = 50 # (O los puntos que quieras)
+
+            # ¡Otorga los puntos de mascota!
+            user = request.user
+            user.experience_points = F('experience_points') + points_awarded
+            user.save(update_fields=['experience_points'])
+            user.refresh_from_db()
+
+            # (Opcional: Envía un WebSocket para que la mascota se actualice)
+            # ... (lógica de channel_layer.group_send) ...
+
+        # 3. Devuelve la respuesta de la IA al frontend
+        return Response({
+            'is_correct': ia_data.get('is_correct'),
+            'feedback': ia_data.get('feedback'),
+            'code_review': ia_data.get('code_review'),
+            'points_awarded': points_awarded,
+            'new_total_xp': request.user.experience_points
+        })
+
+    except CodeChallenge.DoesNotExist:
+        return Response({'error': 'Desafío no encontrado'}, status=404)
+    except Exception as e:
+        print(f"ERROR EN LA EVALUACIÓN DE IA: {e}")
+        return Response({'error': f'Error al evaluar la solución: {e}'}, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_practice_world_data(request, course_id):
+    """
+    Devuelve la estructura de datos completa para el "Mundo de Práctica"
+    de un curso (Pilar 3A).
+    """
+    try:
+        # 1. Busca el curso principal
+        course = Course.objects.get(id=course_id)
+        
+        # 2. Busca todos los módulos (como antes)
+        modules = Module.objects.filter(
+            course_id=course_id
+        ).prefetch_related(
+            'lessons',
+            'lessons__code_challenges' 
+        ).order_by('order')
+        
+        # 3. Serializa los datos
+        course_serializer = CourseSerializer(course) # Serializer simple del curso
+        modules_serializer = ModuleChallengeSerializer(modules, many=True)
+        
+        # 4. ¡Devuelve TODO en un solo objeto!
+        return Response({
+            'course': course_serializer.data,
+            'modules': modules_serializer.data
+        })
+
+    except Exception as e:
+        return Response({'error': f'Error al construir el mundo: {str(e)}'}, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@transaction.atomic
+def create_live_code_challenge(request, lesson_id): # <-- ¡Ahora recibe lesson_id!
+    """
+    Crea un nuevo Desafío de Código EN VIVO (Pilar 3B) para una lección.
+    """
+    if not request.user.role == 'PROFESSOR':
+        return Response({'error': 'No tienes permiso'}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        # --- ¡ARREGLADO! ---
+        # 1. Busca la Lección, no el Curso
+        lesson = Lesson.objects.get(id=lesson_id) 
+        data = request.data
+        
+        serializer = LiveCodeChallengeSerializer(data=data)
+        
+        # 2. Valida los datos
+        if serializer.is_valid(raise_exception=True):
+            # 3. Guarda el desafío, asignando la lección
+            # (El serializer ya sabe de 'title', 'description', 'solution')
+            serializer.save(lesson=lesson) 
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        # (El raise_exception=True se encargará de los campos vacíos)
+
+    except Lesson.DoesNotExist: # <-- ¡ARREGLADO!
+        return Response({'error': 'Lección no encontrada'}, status=status.F_404_NOT_FOUND)
+    except Exception as e:
+        # Esto atrapará errores de validación (como 'solution' vacía)
+        print(f"ERROR AL CREAR DESAFÍO: {e}")
+        return Response({'error': f'Error creando el desafío: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_lesson_live_quizzes(request, lesson_id):
+    """
+    Obtiene todos los Quizzes en Vivo (Pilar 2)
+    asociados a una LECCIÓN específica.
+    """
+    if not request.user.role == 'PROFESSOR':
+        return Response({'error': 'No tienes permiso'}, status=403)
+    
+    try:
+        quizzes = Quiz.objects.filter(
+            lesson_id=lesson_id,
+            quiz_type='LIVE' # Solo los de tipo "en vivo"
+        )
+        serializer = QuizSerializer(quizzes, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_lesson_live_challenges(request, lesson_id):
+    """
+    Obtiene todos los Desafíos de Código en Vivo (Pilar 3B)
+    asociados a una LECCIÓN específica.
+    """
+    if not request.user.role == 'PROFESSOR':
+        return Response({'error': 'No tienes permiso'}, status=403)
+    
+    try:
+        challenges = LiveCodeChallenge.objects.filter(lesson_id=lesson_id)
+        serializer = LiveCodeChallengeSerializer(challenges, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

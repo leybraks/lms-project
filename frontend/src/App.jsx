@@ -11,7 +11,7 @@ import MainLayout from './components/MainLayout';
 import InboxPage from './pages/InboxPage';
 import CourseCatalogPage from './pages/CourseCatalogPage';
 import GradebookPage from './pages/GradebookPage';
-
+import PracticeWorldPage from './pages/PracticeWorldPage';
 function App() {
   return (
     <Routes>
@@ -32,7 +32,8 @@ function App() {
                 path="/courses/:courseId/modules/:moduleId/quiz" 
                 element={<QuizPage />} 
               />
-              
+              <Route path="/practice" element={<PracticeWorldPage />} />
+              <Route path="/course/:courseId/practice" element={<PracticeWorldPage />} />
           </Route>
       </Route>
       

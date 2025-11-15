@@ -21,8 +21,9 @@ from .models import (
     Conversation,
     Message,
     LessonNote,
-    ReadReceipt
-    
+    ReadReceipt,
+    CodeChallenge,
+    LiveCodeChallenge
 )
 
 class LearningObjectiveSerializer(serializers.ModelSerializer):
@@ -493,8 +494,66 @@ class StudentListSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'first_name', 'last_name', 'experience_points']
 
 
+# ====================================================================
+# NUEVO: Serializer para Desafío de Código (Pilar 3)
+# ====================================================================
+class CodeChallengeSerializer(serializers.ModelSerializer):
+    """
+    Serializer para los desafíos de código.
+    No incluye la 'solution' para no enviársela al alumno.
+    """
+    class Meta:
+        model = CodeChallenge
+        fields = [
+            'id', 
+            'lesson', 
+            'title', 
+            'description', 
+            'starter_code', 
+            'order'
+        ]
 
+class LessonChallengeSerializer(serializers.ModelSerializer):
+    """
+    Un serializer simple para Lesson que anida sus CodeChallenges.
+    """
+    code_challenges = CodeChallengeSerializer(many=True, read_only=True)
 
+    class Meta:
+        model = Lesson
+        fields = ['id', 'title', 'order', 'code_challenges']
+
+class ModuleChallengeSerializer(serializers.ModelSerializer):
+    """
+    Un serializer para Module que anida sus Lecciones (con sus Desafíos).
+    ¡Esta es la estructura que tu "Mundo de Práctica" necesita!
+    """
+    # Usamos el nuevo serializer de lecciones
+    lessons = LessonChallengeSerializer(many=True, read_only=True) 
+
+    class Meta:
+        model = Module
+        fields = ['id', 'title', 'order', 'lessons']
+
+# ====================================================================
+# NUEVO: Serializer para Desafío de Código EN VIVO (Pilar 3B)
+# ====================================================================
+class LiveCodeChallengeSerializer(serializers.ModelSerializer):
+    """
+    Serializer para los desafíos de código en vivo (tipo Kahoot).
+    """
+    class Meta:
+        model = LiveCodeChallenge
+        fields = [
+            'id', 
+            'lesson', 
+            'title', 
+            'description', 
+            'starter_code', 
+            'solution' # ¡Importante! El profesor debe proveer la solución
+        ]
+        # Hacemos 'course' de solo lectura porque lo tomaremos de la URL
+        read_only_fields = ['lesson']
 
 
 

@@ -7,6 +7,8 @@ import { useAuth } from '../context/AuthContext'; // <-- ¡NUEVA IMPORTACIÓN!
 import CreateLiveQuiz from '../components/CreateLiveQuiz';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import GradeIcon from '@mui/icons-material/Grade';
+import TerminalIcon from '@mui/icons-material/Terminal';
+import CreateLiveCodeChallenge from '../components/CreateLiveCodeChallenge';
 import {
   Box,
   Typography,
@@ -32,7 +34,8 @@ import {
   Tabs,
   Tab,
   Avatar,
-  Container
+  Container,
+  Modal
 } from '@mui/material';
 
 // --- Iconos ---
@@ -118,6 +121,14 @@ function CourseDetailPage() {
   const [snackbarSeverity, setSnackbarSeverity] = useState("success");
   const [completedLessons, setCompletedLessons] = useState([]); 
   const [adminTab, setAdminTab] = useState(0);
+  const [modalTarget, setModalTarget] = useState({ type: null, lessonId: null });
+
+  const handleOpenModal = (type, lessonId) => {
+    setModalTarget({ type: type, lessonId: lessonId });
+  };
+  const handleCloseModal = () => {
+    setModalTarget({ type: null, lessonId: null });
+  };
   // --- ¡¡¡LÓGICA DE CARGA ACTUALIZADA CON ROLES!!! ---
   useEffect(() => {
     // No hacer nada si el usuario o el curso aún no han cargado
@@ -444,33 +455,43 @@ function CourseDetailPage() {
         </Container>
       </Box>
 
-      {/* 2. CONTENIDO PRINCIPAL (Columna ancha) */}
+{/* --- ¡REEMPLAZA TU <Container> (Línea 340) CON TODO ESTE BLOQUE! --- */}
+      {/* --- ¡REEMPLAZA TODO TU <Container> (Línea 340) CON ESTE BLOQUE! --- */}
+{/* --- ¡REEMPLAZA TU <Container> (Línea 340) CON TODO ESTE BLOQUE! --- */}
+{/* --- ¡REEMPLAZA TU <Container> (Línea 340) CON TODO ESTE BLOQUE! --- */}
       <Container maxWidth="xl" sx={{ mt: 4, mb: 4, px: {xs: 2, md: 3} }}>
         
-        {/* --- VISTA DEL PROFESOR (isOwner) --- */}
+        {/* --- Lógica Condicional Principal --- */}
         {isOwner ? (
+          
+          // ==========================================================
+          // === VISTA DEL PROFESOR (Panel de Pestañas de Admin)
+          // ==========================================================
           <Paper sx={{...cleanPaperStyle(theme), p: 0, overflow: 'hidden'}}>
-            {/* Pestañas de Administración */}
-            <Box sx={{ borderBottom: 1, borderColor: 'divider', px: { xs: 1, md: 3 } }}>
+            
+            {/* --- Pestañas de Administración --- */}
+            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
               <Tabs 
                 value={adminTab} 
                 onChange={(e, newValue) => setAdminTab(newValue)} 
-                variant="scrollable"
-                scrollButtons="auto"
+                variant="fullWidth" // <-- ¡Arreglado para que ocupe todo el ancho!
               >
                 <Tab label="Contenido (Syllabus)" icon={<AutoStoriesIcon />} iconPosition="start" />
-                <Tab label="Crear Quiz en Vivo" icon={<EmojiEventsIcon />} iconPosition="start" />
-                <Tab label="Crear Quiz de Lección" icon={<AssessmentIcon />} iconPosition="start" />
                 <Tab label="Calificaciones" icon={<GradeIcon />} iconPosition="start" />
                 <Tab label="Asistencia" icon={<ChecklistIcon />} iconPosition="start" />
                 <Tab label="Archivos y Tareas" icon={<ArticleIcon />} iconPosition="start" />
+                {/* (Puedes añadir más pestañas aquí si quieres) */}
               </Tabs>
             </Box>
 
-            {/* Panel 0: Contenido (Syllabus) - (Lo que ya tenías) */}
+            {/* --- Panel 0: Contenido (Syllabus) --- */}
+            {/* Aquí es donde el profesor ve el acordeón y añade quizzes/desafíos */}
             <Box sx={{ p: { xs: 2, md: 3 }, display: adminTab === 0 ? 'block' : 'none' }}>
-              <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>Contenido del Curso</Typography>
-              {course.modules && course.modules.length > 0 ? (
+              <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>Contenido y Herramientas</Typography>
+              {(!course.modules || course.modules.length === 0) && (
+                <Alert severity="info">Aún no has añadido contenido. Haz clic en 'Editar Curso' para empezar.</Alert>
+              )}
+              {course.modules && course.modules.length > 0 && (
                 <Box sx={{ mt: 1 }}>
                   {course.modules.map((module, index) => (
                     <Accordion key={module.id} defaultExpanded={index === 0} sx={{ backgroundColor: 'background.default', border: `1px solid ${theme.palette.divider}`, borderRadius: 2, mb: 1.5, '&:before': { display: 'none' }, boxShadow: 'none' }}>
@@ -481,61 +502,55 @@ function CourseDetailPage() {
                         <List dense disablePadding>
                           {module.lessons && module.lessons.length > 0 ? (
                             module.lessons.map((lesson) => (
-                              <ListItemButton key={lesson.id} onClick={() => navigate(`/courses/${courseId}/lessons/${lesson.id}`)} sx={{ pl: 3, py: 1.5 }}>
-                                <ListItemIcon sx={{ minWidth: 32, color: 'text.secondary' }}><OndemandVideoIcon fontSize="small" /></ListItemIcon>
-                                <ListItemText primary={`Lección ${lesson.order + 1}: ${lesson.title}`} />
-                              </ListItemButton>
+                              <Box key={lesson.id}>
+                                <ListItemButton onClick={() => navigate(`/courses/${courseId}/lessons/${lesson.id}`)} sx={{ pl: 3, py: 1.5 }}>
+                                  <ListItemIcon sx={{ minWidth: 32, color: 'text.secondary' }}><OndemandVideoIcon fontSize="small" /></ListItemIcon>
+                                  <ListItemText primary={`Lección ${lesson.order + 1}: ${lesson.title}`} />
+                                </ListItemButton>
+                                
+                                {/* ¡Caja de Herramientas del Profesor (Tu idea)! */}
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, p: 1.5, pl: 3, bgcolor: 'action.hover', borderTop: `1px solid ${theme.palette.divider}` }}>
+                                  <Button size="small" variant="outlined" startIcon={<EmojiEventsIcon />} onClick={() => handleOpenModal('live_quiz', lesson.id)}>
+                                    Añadir Quiz en Vivo
+                                  </Button>
+                                  <Button size="small" variant="outlined" startIcon={<TerminalIcon />} onClick={() => handleOpenModal('live_challenge', lesson.id)}>
+                                    Añadir Desafío IA
+                                  </Button>
+                                  <Button size="small" variant="outlined" startIcon={<AssessmentIcon />} onClick={() => {/* Lógica para Quiz Calificado */}}>
+                                    Añadir Quiz Calificado
+                                  </Button>
+                                </Box>
+                              </Box>
                             ))
-                          ) : ( <ListItem><ListItemText primary="No hay lecciones." /></ListItem> )}
+                          ) : ( <ListItem><ListItemText primary="No hay lecciones en este módulo." /></ListItem> )}
                         </List>
                         {module.quiz && (
                           <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}`, textAlign: 'left' }}>
-                            <Button variant="outlined" color="secondary" size="small" startIcon={<AssessmentIcon />} onClick={() => navigate(`/courses/${courseId}/modules/${module.id}/quiz`)}>Editar Examen</Button>
+                            <Button variant="outlined" color="secondary" size="small" startIcon={<AssessmentIcon />} onClick={() => navigate(`/courses/${courseId}/modules/${module.id}/quiz`)}>Editar Examen del Módulo</Button>
                           </Box>
                         )}
                       </AccordionDetails>
                     </Accordion>
                   ))}
                 </Box>
-              ) : (
-                <Alert severity="info">Aún no has añadido contenido. Haz clic en 'Editar Curso' para empezar.</Alert>
               )}
             </Box>
-
-            {/* Panel 1: Crear Quiz en Vivo (¡NUEVO!) */}
-            <Box sx={{ display: adminTab === 1 ? 'block' : 'none' }}>
-              <CreateLiveQuiz 
-                courseId={courseId} 
-                onQuizCreated={(newQuiz) => {
-                  console.log("Quiz en vivo creado:", newQuiz);
-                  setSnackbarMessage("¡Quiz en vivo creado con éxito!");
-                  setSnackbarSeverity("success");
-                  setSnackbarOpen(true);
-                  // (Aquí podrías recargar la lista de quizzes en LessonPage si fuera necesario)
-                }} 
-              />
-            </Box>
             
-            {/* Panel 2: Crear Quiz de Lección (Maqueta) */}
-            <Box sx={{ p: { xs: 2, md: 3 }, display: adminTab === 2 ? 'block' : 'none' }}>
-               <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>Crear Quiz de Lección</Typography>
-               <Alert severity="info">Aquí irá el formulario para crear quizzes con nota (Pilar 3).</Alert>
-            </Box>
-
-            {/* Panel 3: Calificaciones (Maqueta) */}
-            <Box sx={{ p: { xs: 2, md: 3 }, display: adminTab === 3 ? 'block' : 'none' }}>
+            {/* --- Panel 1: Calificaciones (Maqueta) --- */}
+            {/* (Hemos re-numerado las pestañas) */}
+            <Box sx={{ p: { xs: 2, md: 3 }, display: adminTab === 1 ? 'block' : 'none' }}>
                <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>Libro de Calificaciones</Typography>
                <Alert severity="info">Aquí irá la tabla con las notas de todos los alumnos.</Alert>
             </Box>
             
-            {/* Panel 4: Asistencia (Maqueta) */}
-            <Box sx={{ p: { xs: 2, md: 3 }, display: adminTab === 4 ? 'block' : 'none' }}>
+            {/* --- Panel 2: Asistencia (Maqueta) --- */}
+            <Box sx={{ p: { xs: 2, md: 3 }, display: adminTab === 2 ? 'block' : 'none' }}>
                <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>Registro de Asistencia</Typography>
                <Alert severity="info">Aquí podrás ver los reportes de asistencia de las clases en vivo.</Alert>
             </Box>
 
-            {/* Panel 5: Archivos y Tareas (Maqueta) */}
-            <Box sx={{ p: { xs: 2, md: 3 }, display: adminTab === 5 ? 'block' : 'none' }}>
+            {/* --- Panel 3: Archivos y Tareas (Maqueta) --- */}
+            <Box sx={{ p: { xs: 2, md: 3 }, display: adminTab === 3 ? 'block' : 'none' }}>
                <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>Gestión de Tareas y Archivos</Typography>
                <Alert severity="info">Aquí podrás subir archivos descargables y crear/editar tareas.</Alert>
             </Box>
@@ -544,10 +559,13 @@ function CourseDetailPage() {
 
         ) : (
 
-          // --- VISTA DEL ALUMNO (isEnrolled o Visitante) ---
+          // ==========================================================
+          // === VISTA DEL ALUMNO (isEnrolled o Visitante)
+          // ==========================================================
           <Grid container spacing={4}>
-            {/* Esta es la vista original que tenías */}
             <Grid item xs={12}> 
+              
+              {/* --- "Qué aprenderás" (Solo Alumno) --- */}
               <motion.div variants={itemVariants}>
                 <Paper sx={{...cleanPaperStyle(theme), mb: 4 }}>
                   <Typography variant="h4" sx={{ fontWeight: 600, mb: 2 }}>Qué aprenderás</Typography>
@@ -561,9 +579,15 @@ function CourseDetailPage() {
                   </List>
                 </Paper>
               </motion.div>
+              
+              {/* --- "Contenido del Curso" (Solo Alumno) --- */}
               <motion.div variants={itemVariants}>
                 <Paper sx={{...cleanPaperStyle(theme), mb: 4}}>
                   <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>Contenido del Curso</Typography>
+                  {!isEnrolled && <Alert severity="warning">Inscríbete para ver el contenido del curso.</Alert>}
+                  {isEnrolled && (!course.modules || course.modules.length === 0) && (
+                    <Alert severity="info">El contenido estará disponible pronto.</Alert>
+                  )}
                   {isEnrolled && course.modules && course.modules.length > 0 && (
                     <Box sx={{ mt: 1 }}>
                       {course.modules.map((module, index) => (
@@ -577,6 +601,7 @@ function CourseDetailPage() {
                                 module.lessons.map((lesson) => {
                                   const isLessonCompleted = completedLessons.includes(lesson.id);
                                   return (
+                                    // Esta es la vista de Alumno, NO tiene botones de admin
                                     <ListItemButton key={lesson.id} onClick={() => navigate(`/courses/${courseId}/lessons/${lesson.id}`)} sx={{ pl: 3, py: 1.5 }}>
                                       <ListItemIcon sx={{ minWidth: 32, color: isLessonCompleted ? 'success.main' : 'text.secondary' }}>
                                         {isLessonCompleted ? <CheckCircleIcon fontSize="small" /> : <OndemandVideoIcon fontSize="small" />}
@@ -597,12 +622,10 @@ function CourseDetailPage() {
                       ))}
                     </Box>
                   )}
-                  {!isEnrolled && <Alert severity="warning">Inscríbete para ver el contenido del curso.</Alert>}
-                  {isEnrolled && (!course.modules || course.modules.length === 0) && (
-                    <Alert severity="info">El contenido estará disponible pronto.</Alert>
-                  )}
                 </Paper>
               </motion.div>
+              
+              {/* --- "Requisitos" (Solo Alumno) --- */}
               <motion.div variants={itemVariants}>
                 <Paper sx={{...cleanPaperStyle(theme), mb: 4 }}>
                   <Typography variant="h4" sx={{ fontWeight: 600, mb: 2 }}>Requisitos</Typography>
@@ -616,10 +639,66 @@ function CourseDetailPage() {
                   </List>
                 </Paper>
               </motion.div>
+              
             </Grid>
           </Grid>
         )}
       </Container>
+      
+      {/* --- ¡NUEVO! Modales para los formularios --- */}
+      {/* (Pega esto al final de tu archivo, justo antes del <Snackbar>) */}
+
+      {/* 1. Modal para Crear Quiz en Vivo */}
+      <Modal 
+        open={modalTarget.type === 'live_quiz'} 
+        onClose={handleCloseModal}
+      >
+        <Paper sx={{ 
+          position: 'absolute', top: '50%', left: '50%', 
+          transform: 'translate(-50%, -50%)', 
+          width: '90%', maxWidth: 800, 
+          p: 0, 
+          maxHeight: '90vh', 
+          overflowY: 'auto' 
+        }}>
+          <CreateLiveQuiz 
+            lessonId={modalTarget.lessonId} 
+            onQuizCreated={(newQuiz) => {
+              setSnackbarMessage("¡Quiz en vivo creado!");
+              setSnackbarSeverity("success");
+              setSnackbarOpen(true);
+              handleCloseModal();
+            }} 
+          />
+        </Paper>
+      </Modal>
+      
+      {/* 2. Modal para Crear Desafío de Código en Vivo */}
+      <Modal 
+        open={modalTarget.type === 'live_challenge'} 
+        onClose={handleCloseModal}
+      >
+        <Paper sx={{ 
+          position: 'absolute', top: '50%', left: '50%', 
+          transform: 'translate(-50%, -50%)', 
+          width: '90%', maxWidth: 800, 
+          p: 0, 
+          maxHeight: '90vh', 
+          overflowY: 'auto' 
+        }}>
+          <CreateLiveCodeChallenge
+            lessonId={modalTarget.lessonId}
+            onChallengeCreated={() => {
+              setSnackbarMessage("¡Desafío de código en vivo creado!");
+              setSnackbarSeverity("success");
+              setSnackbarOpen(true);
+              handleCloseModal();
+            }}
+          />
+        </Paper>
+      </Modal>
+
+      {/* --- FIN DEL CÓDIGO DE REEMPLAZO --- */}
 
 
       {/* Snackbar (Conectado, sin cambios) */}

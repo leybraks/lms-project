@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useColorMode } from '../context/ThemeContext'; 
 import { useTheme } from '@mui/material/styles'; 
 import { AnimatePresence, motion } from "framer-motion"; 
-
+import ExtensionIcon from '@mui/icons-material/Extension';
 
 import { 
   AppBar, 
@@ -158,6 +158,10 @@ function MainLayout() {
                 <ListItemButton component={RouterLink} to="/groups" selected={location.pathname === '/groups'}>
                     <ListItemIcon><GroupIcon /></ListItemIcon>
                     <ListItemText primary="Group" />
+                </ListItemButton>
+                <ListItemButton component={RouterLink} to="/practice">
+                  <ListItemIcon><ExtensionIcon /></ListItemIcon>
+                  <ListItemText primary="Mundo de Práctica" />
                 </ListItemButton>
             </List>
             <Divider sx={{ my: 2 }} />

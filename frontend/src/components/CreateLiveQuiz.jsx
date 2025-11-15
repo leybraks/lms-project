@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import axiosInstance from '../api/axios'; // Importa tu axios
+import axiosInstance from '../api/axios'; 
+import { useAuth } from '../context/AuthContext';
 import { 
   Box, 
   Paper, 
@@ -17,35 +18,46 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 
-// --- COMPONENTE DE OPCIÓN ---
-const ChoiceEditor = ({ questionIndex, choiceIndex, choice, handleChoiceChange, handleCorrectChange, removeChoice }) => {
+// --- Sub-componente: Editor de Opciones ---
+const ChoiceEditor = ({ questionIndex, choiceIndex, choice, handleChoiceChange, handleCorrectChange, removeChoice, canRemove }) => {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+      {/* Radio button para marcar la correcta */}
       <Radio
         checked={choice.is_correct}
         onChange={() => handleCorrectChange(questionIndex, choiceIndex)}
       />
+      {/* Campo de texto para la opción */}
       <TextField
         fullWidth
         size="small"
         label={`Opción ${choiceIndex + 1}`}
         value={choice.text}
         onChange={(e) => handleChoiceChange(e, questionIndex, choiceIndex)}
+        required
       />
-      <IconButton color="error" onClick={() => removeChoice(questionIndex, choiceIndex)}>
+      <IconButton 
+        color="error" 
+        onClick={() => removeChoice(questionIndex, choiceIndex)}
+        disabled={!canRemove} // Deshabilitado si es una de las 2 mínimas
+      >
         <DeleteIcon />
       </IconButton>
     </Box>
   );
 };
 
-// --- COMPONENTE DE PREGUNTA ---
-const QuestionEditor = ({ questionIndex, question, handleQuestionChange, ...choiceHandlers }) => {
+// --- Sub-componente: Editor de Preguntas ---
+const QuestionEditor = ({ questionIndex, question, handlers, canRemove }) => {
   return (
-    <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+    <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: 'action.hover' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h6" sx={{ mb: 1 }}>Pregunta {questionIndex + 1}</Typography>
-        <IconButton color="error" onClick={() => choiceHandlers.removeQuestion(questionIndex)}>
+        <IconButton 
+          color="error" 
+          onClick={() => handlers.removeQuestion(questionIndex)}
+          disabled={!canRemove} // Deshabilitado si es la última pregunta
+        >
           <DeleteIcon />
         </IconButton>
       </Box>
@@ -53,10 +65,13 @@ const QuestionEditor = ({ questionIndex, question, handleQuestionChange, ...choi
         fullWidth
         label="Texto de la Pregunta"
         value={question.text}
-        onChange={(e) => handleQuestionChange(e, questionIndex)}
+        onChange={(e) => handlers.handleQuestionChange(e, questionIndex)}
+        required
         sx={{ mb: 2 }}
       />
       <Typography variant="body2" sx={{ mb: 1 }}>Opciones (marca la correcta):</Typography>
+      
+      {/* Usamos RadioGroup para asegurar que solo una sea 'is_correct' */}
       <RadioGroup>
         {question.choices.map((choice, cIndex) => (
           <ChoiceEditor
@@ -64,14 +79,17 @@ const QuestionEditor = ({ questionIndex, question, handleQuestionChange, ...choi
             questionIndex={questionIndex}
             choiceIndex={cIndex}
             choice={choice}
-            {...choiceHandlers}
+            handleChoiceChange={handlers.handleChoiceChange}
+            handleCorrectChange={handlers.handleCorrectChange}
+            removeChoice={handlers.removeChoice}
+            canRemove={question.choices.length > 2} // UX: No dejar borrar si solo quedan 2
           />
         ))}
       </RadioGroup>
       <Button 
         size="small" 
         startIcon={<AddIcon />} 
-        onClick={() => choiceHandlers.addChoice(questionIndex)}
+        onClick={() => handlers.addChoice(questionIndex)}
         sx={{mt: 1}}
       >
         Añadir Opción
@@ -80,17 +98,19 @@ const QuestionEditor = ({ questionIndex, question, handleQuestionChange, ...choi
   );
 };
 
-// --- FORMULARIO PRINCIPAL ---
-// Este componente necesita el 'courseId' como prop
-const CreateLiveQuiz = ({ courseId, onQuizCreated }) => {
-  // El "estado" que representa la estructura JSON de la API
+
+// --- Componente Principal del Formulario ---
+const CreateLiveQuiz = ({ lessonId, onQuizCreated }) => {
+  const { authTokens } = useAuth(); // Para la autenticación
+
+  // Estado que representa el JSON que enviaremos a la API
   const [quizData, setQuizData] = useState({
     title: "",
     questions: [
       { 
         text: "", 
         choices: [
-          { text: "", is_correct: true }, // Empezamos con 2 opciones
+          { text: "", is_correct: true },
           { text: "", is_correct: false }
         ] 
       }
@@ -121,7 +141,7 @@ const CreateLiveQuiz = ({ courseId, onQuizCreated }) => {
 
   const handleCorrectChange = (qIndex, cIndex) => {
     const newQuestions = [...quizData.questions];
-    // Pone todas las opciones de esta pregunta en 'false'
+    // Pone todas en 'false'
     newQuestions[qIndex].choices = newQuestions[qIndex].choices.map(c => ({ ...c, is_correct: false }));
     // Pone la seleccionada en 'true'
     newQuestions[qIndex].choices[cIndex].is_correct = true;
@@ -139,7 +159,8 @@ const CreateLiveQuiz = ({ courseId, onQuizCreated }) => {
   };
 
   const removeQuestion = (qIndex) => {
-    if (quizData.questions.length <= 1) return; // No dejes borrar la última
+    // UX: No permitir borrar la última pregunta
+    if (quizData.questions.length <= 1) return; 
     const newQuestions = quizData.questions.filter((_, index) => index !== qIndex);
     setQuizData({ ...quizData, questions: newQuestions });
   };
@@ -151,14 +172,14 @@ const CreateLiveQuiz = ({ courseId, onQuizCreated }) => {
   };
 
   const removeChoice = (qIndex, cIndex) => {
-    if (quizData.questions[qIndex].choices.length <= 2) return; // Mínimo 2 opciones
+    // UX: Requerir al menos 2 opciones
+    if (quizData.questions[qIndex].choices.length <= 2) return; 
     const newQuestions = [...quizData.questions];
     newQuestions[qIndex].choices = newQuestions[qIndex].choices.filter((_, index) => index !== cIndex);
     setQuizData({ ...quizData, questions: newQuestions });
   };
 
   // --- Handler de Envío (Llamada a la API) ---
-  
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSaving(true);
@@ -166,31 +187,47 @@ const CreateLiveQuiz = ({ courseId, onQuizCreated }) => {
     setSuccess(null);
 
     try {
-      // ¡Esta es la API que creamos en 'views.py'!
+      // Llama a la API que creamos (con 'lessonId')
       const response = await axiosInstance.post(
-        `/api/course/${courseId}/create_live_quiz/`, 
-        quizData // Le pasamos el estado, que tiene el formato JSON perfecto
+        `/api/lesson/${lessonId}/create_live_quiz/`, 
+        quizData, // El objeto de estado es el JSON
+        {
+          headers: {
+            'Authorization': `Bearer ${authTokens.access}`
+          }
+        }
       );
       
       setSuccess(`¡Quiz "${response.data.title}" creado con éxito!`);
-      // (Opcional) Limpiar el formulario
+      // Limpia el formulario
       setQuizData({ title: "", questions: [{ text: "", choices: [{ text: "", is_correct: true }, { text: "", is_correct: false }] }] });
-      // (Opcional) Llama a una función del padre para refrescar la lista
+      
+      // Llama a la función del padre (para cerrar el modal)
       if (onQuizCreated) onQuizCreated(response.data); 
 
     } catch (err) {
       console.error("Error al crear el quiz:", err);
-      setError(err.response?.data?.error || "Ocurrió un error desconocido.");
+      setError(err.response?.data?.error || "Ocurrió un error desconocido. Revisa que todas las preguntas y opciones tengan texto.");
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // Objeto de handlers para pasar a los sub-componentes
+  const handlers = {
+    handleQuestionChange,
+    handleChoiceChange,
+    handleCorrectChange,
+    removeQuestion,
+    addChoice,
+    removeChoice
   };
 
   return (
     <Box 
       component="form" 
       onSubmit={handleSubmit} 
-      sx={{ maxWidth: 800, margin: 'auto', p: 3 }}
+      sx={{ p: 3 }} // Añade padding dentro del modal
     >
       <Typography variant="h4" sx={{ mb: 3 }}>Crear Nuevo Quiz en Vivo</Typography>
       
@@ -208,12 +245,8 @@ const CreateLiveQuiz = ({ courseId, onQuizCreated }) => {
           key={qIndex}
           questionIndex={qIndex}
           question={question}
-          handleQuestionChange={handleQuestionChange}
-          handleChoiceChange={handleChoiceChange}
-          handleCorrectChange={handleCorrectChange}
-          removeQuestion={removeQuestion}
-          addChoice={addChoice}
-          removeChoice={removeChoice}
+          handlers={handlers}
+          canRemove={quizData.questions.length > 1} // UX: No dejar borrar la última
         />
       ))}
       
@@ -228,6 +261,7 @@ const CreateLiveQuiz = ({ courseId, onQuizCreated }) => {
       
       <Divider sx={{ mb: 3 }} />
 
+      {/* Feedback de Alertas */}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
       
@@ -238,7 +272,7 @@ const CreateLiveQuiz = ({ courseId, onQuizCreated }) => {
         disabled={isSaving}
         fullWidth
       >
-        {isSaving ? <CircularProgress size={24} /> : "Guardar Quiz en Vivo"}
+        {isSaving ? <CircularProgress size={24} color="inherit" /> : "Guardar Quiz en Vivo"}
       </Button>
     </Box>
   );
