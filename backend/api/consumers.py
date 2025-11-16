@@ -448,27 +448,26 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     async def start_code_game(self, challenge_id):
         """
-        Carga el desafío de código, lo envía a todos
-        E INICIA EL TEMPORIZADOR.
+        Carga el desafío, lo envía a todos
+        E INICIA EL TEMPORIZADOR DE 5 MINUTOS.
         """
         challenge_data = await self.get_live_code_challenge(challenge_id)
         if not challenge_data:
             print(f"Error: No se encontró el LiveCodeChallenge {challenge_id}")
             return
-            
-        # Prepara el "estado de juego" (similar al quiz)
+
         game_state = {
-            "quiz_id": f"code_{challenge_id}", # ID de juego único
-            "current_question_index": 0, # Solo 1 pregunta
-            "questions": [challenge_data], # Solo 1 desafío
-            "ranking": {}, # Ranking vacío
-            "current_question_answers": {} # Quién ha respondido
+            "game_type": "code",
+            "quiz_id": f"code_{challenge_id}",
+            "current_question_index": 0,
+            "questions": [challenge_data],
+            "ranking": {},
+            "current_question_answers": {}
         }
-        
-        # Guarda el estado del juego en el caché
-        self.game_cache_key = f"live_quiz_{self.room_group_name}" # Reutiliza la clave del quiz
+
+        self.game_cache_key = f"live_game_{self.room_group_name}"
         cache.set(self.game_cache_key, game_state, timeout=3600)
-        
+
         print(f"Enviando Desafío de Código {challenge_id}")
         await self.channel_layer.group_send(
             self.room_group_name,
@@ -476,18 +475,20 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'type': 'code_challenge_question',
                 'data': {
                     'challenge': challenge_data,
-                    'timer': 300 # 300 segundos (5 minutos)
+                    'timer': 300, # 300 segundos (5 minutos)
+                    'language': 'python'
                 }
             }
         )
-        
-        # --- ¡LÓGICA DEL TEMPORIZADOR AÑADIDA! ---
-        await asyncio.sleep(300) # Espera 5 minutos
-        
-        # Cuando el tiempo se acaba, termina el juego
-        # (Reutilizamos la función 'end_game' del quiz)
-        await self.end_game()
 
+        # --- ¡TEMPORIZADOR RESTAURADO! ---
+        await asyncio.sleep(300) # Espera 5 minutos
+
+        # Comprueba si el juego sigue activo antes de terminarlo
+        final_game_state = cache.get(self.game_cache_key)
+        if final_game_state and final_game_state.get("game_type") == "code":
+            print(f"Temporizador del desafío de código {challenge_id} terminado.")
+            await self.end_game() # Llama a la función que muestra los resultados finales
 
     @database_sync_to_async
     def get_live_code_challenge(self, challenge_id):
@@ -686,26 +687,37 @@ class ChatConsumer(AsyncWebsocketConsumer):
             }))
     async def handle_code_submission(self, challenge_id, user_code, user):
         """
-        Paso 1 (Async): Maneja el flujo de evaluación de código.
+        Evalúa el código y actualiza el ranking.
+        ¡YA NO TERMINA EL JUEGO!
         """
         try:
-            # 2. Llama a la parte SÍNCRONA (IA) y espera el resultado
+            # Revisa el estado del juego ANTES de llamar a la IA
+            game_state = cache.get(self.game_cache_key)
+            if not game_state or game_state.get("game_type") != "code":
+                return # El juego ya terminó
+
+            if user.id in game_state["current_question_answers"]:
+                return # El usuario ya envió una respuesta correcta
+
+            # Llama a la IA
             print(f"[CONSUMER] Enviando código de {user.username} a la IA...")
             ia_result = await self.run_ia_evaluation(challenge_id, user_code)
-            
             is_correct = ia_result.get('is_correct', False)
 
-            # 3. Envía el feedback PRIVADO (¡Ahora es async!)
+            # Envía el feedback PRIVADO ("¡Correcto!" o "¡Incorrecto!")
             await self.send(text_data=json.dumps({
                 'type': 'answer_result',
                 'data': { 'is_correct': is_correct, 'choice_id': None }
             }))
-            
+
             print(f"[CONSUMER] Feedback enviado a {user.username}: {'Correcto' if is_correct else 'Incorrecto'}")
 
-            # 4. Si es correcto, actualiza el ranking (¡Ahora es async!)
+            # Si es correcto, actualiza el ranking
             if is_correct:
+                # 'update_code_ranking' es async y envía la actualización del ranking
                 await self.update_code_ranking(user, challenge_id)
+
+            # ¡YA NO HAY LÓGICA DE 'is_first_winner'!
 
         except Exception as e:
             print(f"ERROR GRANDE en handle_code_submission: {e}")
@@ -713,7 +725,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'type': 'answer_result',
                 'data': { 'is_correct': False }
             }))
-
     # 2. La Tarea SÍNCRONA (La "IA" - Marcada como @database_sync_to_async)
     @database_sync_to_async
     def run_ia_evaluation(self, challenge_id, user_code):
@@ -781,8 +792,81 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'data': { 'ranking': sorted_ranking, 'is_final': False }
             }
         )
+    async def code_challenge_question(self, event):
+        """
+        Handler: Envía el desafío de código a todos los alumnos.
+        (Es llamado por 'start_code_game')
+        """
+        print(f"[CONSUMER LOG] Retransmitiendo 'code_challenge_question'")
+        await self.send(text_data=json.dumps({
+            'type': 'code_challenge_question',
+            'data': event['data'] # { challenge: ..., timer: 300 }
+        }))
+    async def start_code_game(self, challenge_id):
+        """
+        (Llamado por 'receive')
+        Carga el desafío de código, lo envía a todos
+        E INICIA EL TEMPORIZADOR.
+        """
+        challenge_data = await self.get_live_code_challenge(challenge_id)
+        if not challenge_data:
+            print(f"Error: No se encontró el LiveCodeChallenge {challenge_id}")
+            return
+            
+        # Prepara el "estado de juego" (similar al quiz)
+        game_state = {
+            "game_type": "code", # ¡Importante!
+            "quiz_id": f"code_{challenge_id}", # ID de juego único
+            "current_question_index": 0,
+            "questions": [challenge_data], # Solo 1 desafío
+            "ranking": {}, # Ranking vacío
+            "current_question_answers": {} # Quién ha respondido
+        }
+        
+        # --- ¡LÍNEA CORREGIDA! ---
+        # (Usa la variable 'self.room_group_name' que ya existe)
+        self.game_cache_key = f"live_game_{self.room_group_name}" 
+        cache.set(self.game_cache_key, game_state, timeout=3600) # 1 hora
+        # --- FIN DE LA CORRECCIÓN ---
+        
+        print(f"Enviando Desafío de Código {challenge_id}")
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'code_challenge_question',
+                'data': {
+                    'challenge': challenge_data,
+                    'timer': 300, # 300 segundos (5 minutos)
+                    'language': 'python'
+                }
+            }
+        )
+        
+        # --- ¡LÓGICA DEL TEMPORIZADOR! ---
+        await asyncio.sleep(300) # Espera 5 minutos
+        
+        print(f"Temporizador del desafío de código {challenge_id} terminado.")
+        await self.end_game()
 
-
+    @database_sync_to_async
+    def get_live_code_challenge(self, challenge_id):
+        """
+        Obtiene un LiveCodeChallenge y lo serializa (sin la solución).
+        """
+        try:
+            challenge = LiveCodeChallenge.objects.get(id=challenge_id)
+            # ¡Editamos el serializer para que NO envíe la solución!
+            serializer = LiveCodeChallengeSerializer(challenge)
+            data = serializer.data
+            
+            # ¡Seguridad! No enviar la solución al frontend
+            if 'solution' in data:
+                del data['solution'] 
+                
+            return data
+        except Exception as e:
+            print(f"Error al obtener LiveCodeChallenge: {e}")
+            return None
 class InboxConsumer(AsyncWebsocketConsumer):
     """
     Este Consumer maneja las conexiones de WebSocket para

@@ -6,6 +6,9 @@ import { motion } from "framer-motion";
 import PetsIcon from '@mui/icons-material/Pets';
 import { JitsiMeeting } from '@jitsi/react-sdk';
 import TerminalIcon from '@mui/icons-material/Terminal';
+import CodeMirror from '@uiw/react-codemirror';
+import { python } from '@codemirror/lang-python';
+import { vscodeDark } from '@uiw/codemirror-theme-vscode';
 import { 
   Box, 
   Typography, 
@@ -1311,45 +1314,136 @@ function LessonPage() {
               {lesson.live_session_room ? (
                   
                   // --- VISTA DE CLASE EN VIVO (JITSI) ---
-                  <Box sx={{ height: '70vh', minHeight: 500, borderRadius: 3, overflow: 'hidden', bgcolor: 'background.default' }}>
+                  <Box
+                    sx={{
+                      height: '70vh',
+                      minHeight: 500,
+                      borderRadius: 3,
+                      overflow: 'hidden',
+                      bgcolor: 'background.default'
+                    }}
+                  >
                     <JitsiMeeting
-                        roomName={lesson.live_session_room} // <-- El nombre de la sala desde la API
-                        
-                        // Pasa el nombre de usuario de tu AuthContext
-                        userInfo={{
-                            displayName: user.username 
-                        }}
-                        
-                        // Configuración para una buena UX
-                        configOverwrite={{
-                            prejoinPageEnabled: true, // Pide al usuario su nombre y cámara/mic
-                            startWithAudioMuted: true,
-                            startWithVideoMuted: true,
-                            // Opcional: Si Jitsi ofrece grabación, configúralo aquí
-                            // fileRecordingsEnabled: true, 
-                            // remoteVideoMenu: {
-                            //   disableKick: true,
-                            // },
-                        }}
-                        
-                        // Configuración de la interfaz de Jitsi
-                        interfaceConfigOverwrite={{
-                            SHOW_JITSI_WATERMARK: false,
-                            SHOW_WATERMARK_FOR_GUESTS: false,
-                            TOOLBAR_BUTTONS: [
-                                'microphone', 'camera', 'chat', 'raisehand', 
-                                'desktop', 'fullscreen', 'tileview', 'profile', 'hangup',
-                                // 'recording' // Descomenta si tu servidor Jitsi lo permite
-                            ],
-                        }}
-                        
-                        // Asegura que el iframe ocupe todo el espacio
-                        getIFrameRef={(iframeRef) => { 
-                            iframeRef.style.height = '100%'; 
-                            iframeRef.style.width = '100%'; 
-                        }}
+                      roomName={lesson.live_session_room}
+                      userInfo={{ displayName: user.username }}
+
+                      // --- NIVEL 2: THEME PERSONALIZADO ---
+                      configOverwrite={{
+                        prejoinPageEnabled: true,
+                        startWithAudioMuted: true,
+                        startWithVideoMuted: true,
+                        analytics: { disabled: true },
+                        disableThirdPartyRequests: true,
+
+                        // Fusionar Jitsi con tu theme de MUI
+                        defaultLanguage: "es",
+                        toolbarConfig: {
+                          toolbarButtons: [
+                            "microphone", "camera", "desktop", "raisehand",
+                            "fullscreen", "tileview", "hangup"
+                          ]
+                        },
+                      }}
+
+                      interfaceConfigOverwrite={{
+                        // Evitar cualquier branding o watermark
+                        SHOW_JITSI_WATERMARK: false,
+                        SHOW_WATERMARK_FOR_GUESTS: false,
+                        SHOW_BRAND_WATERMARK: false,
+                        SHOW_POWERED_BY: false,
+                        SHOW_CHROME_EXTENSION_BANNER: false,
+
+                        // Cambiar nombre interno de la plataforma
+                        APP_NAME: 'Tu Plataforma',
+                        NATIVE_APP_NAME: 'Tu Plataforma',
+                        PROVIDER_NAME: 'Tu Marca',
+
+                        // Tema de colores → MUI Theme
+                        MAIN_COLOR: theme.palette.primary.main,
+                        TOOLBAR_BACKGROUND: theme.palette.background.paper,
+                        DEFAULT_BACKGROUND: theme.palette.background.default,
+
+                        // Elimina botones sensibles
+                        TOOLBAR_BUTTONS: [
+                          'microphone',
+                          'camera',
+                          'raisehand',
+                          'desktop',
+                          'fullscreen',
+                          'tileview',
+                          'hangup'
+                        ],
+                      }}
+
+                      // --- NIVEL 1: INYECTOR PARA 100% OCULTAR JITSI ---
+                      getIFrameRef={(iframeRef) => {
+                        iframeRef.style.height = "100%";
+                        iframeRef.style.width = "100%";
+
+                        const injectCSS = () => {
+                          try {
+                            const iframeDoc = iframeRef.contentWindow?.document;
+                            if (!iframeDoc || !iframeDoc.head) return false;
+
+                            const style = iframeDoc.createElement("style");
+                            style.innerHTML = `
+                              /* Ocultar logos / branding */
+                              .jitsi-logo,
+                              .watermark,
+                              .watermark-left,
+                              .atlas-logo,
+                              a[href*="jitsi"],
+                              .branding,
+                              .header-logo-container {
+                                display: none !important;
+                                visibility: hidden !important;
+                              }
+
+                              /* Prejoin: textos */
+                              .premeeting-screen .title,
+                              .premeeting-screen .description {
+                                display: none !important;
+                              }
+
+                              /* Powered by */
+                              .poweredby,
+                              .attribution-wrap {
+                                display: none !important;
+                              }
+
+                              /* Banners */
+                              .chrome-extension-banner,
+                              .extension-banner,
+                              .notice,
+                              .notice-warning,
+                              .notice-info {
+                                display: none !important;
+                              }
+                            `;
+
+                            iframeDoc.head.appendChild(style);
+                            return true; // Inyección exitosa
+                          } catch (e) {
+                            return false;
+                          }
+                        };
+
+                        // Intentar cada 300ms hasta que cargue el DOM
+                        const interval = setInterval(() => {
+                          const success = injectCSS();
+                          if (success) {
+                            clearInterval(interval);
+                            console.log("✔ CSS inyectado en Jitsi");
+                          }
+                        }, 300);
+
+                        // Failsafe (detener a los 8s para no dejarlo infinito)
+                        setTimeout(() => clearInterval(interval), 8000);
+                      }}
+
                     />
                   </Box>
+
                   
               ) : (
                 
@@ -1613,7 +1707,6 @@ function LessonPage() {
                                     <Tooltip title="Recursos"><Tab icon={<CloudDownloadIcon />} aria-label="Recursos" sx={{minWidth: 'auto'}} /></Tooltip>
                                     <Tooltip title="Entregables"><Tab icon={<AssignmentTurnedInIcon />} aria-label="Entregables" sx={{minWidth: 'auto'}} /></Tooltip>
                                     <Tooltip title="Mascota"><Tab icon={<PetsIcon />} aria-label="Mascota" sx={{minWidth: 'auto'}} /></Tooltip>
-                                    <Tooltip title="Práctica IA"><Tab icon={<TerminalIcon />} aria-label="Práctica IA" sx={{minWidth: 'auto'}} /></Tooltip>
                                 </Tabs>
                             </Box>
 
@@ -1859,21 +1952,40 @@ function LessonPage() {
             </>
           )}
           
-          {/* === VISTA 2: FEEDBACK CORRECTO === */}
           {(quizGameState.view === 'result_correct') && (
             <Box>
               <CheckCircleIcon sx={{ fontSize: 80, color: 'success.main', mb: 2 }} />
               <Typography variant="h4" sx={{ fontWeight: 600 }}>¡Correcto!</Typography>
-              <Typography color="text.secondary">¡Buen trabajo!</Typography>
+              <Typography color="text.secondary">¡Buen trabajo! Has ganado puntos.</Typography>
+              
+              {/* --- ¡BOTÓN AÑADIDO (TU IDEA)! --- */}
+              <Button 
+                variant="contained" 
+                fullWidth 
+                sx={{ mt: 3 }}
+                onClick={() => setQuizGameState({ view: 'ranking', data: null })}
+              >
+                Ver Ranking en Vivo
+              </Button>
             </Box>
           )}
           
-          {/* === VISTA 3: FEEDBACK INCORRECTO === */}
+          {/* === VISTA 3: FEEDBACK INCORRECTO (¡CON BOTÓN!) === */}
           {(quizGameState.view === 'result_incorrect') && (
             <Box>
               <ErrorOutlineIcon sx={{ fontSize: 80, color: 'error.main', mb: 2 }} />
               <Typography variant="h4" sx={{ fontWeight: 600 }}>¡Incorrecto!</Typography>
-              <Typography color="text.secondary">¡Mejor suerte la próxima!</Typography>
+              <Typography color="text.secondary">¡No te rindas! Sigue intentando o revisa el ranking.</Typography>
+              
+              {/* --- ¡BOTÓN AÑADIDO (TU IDEA)! --- */}
+              <Button 
+                variant="outlined" 
+                fullWidth 
+                sx={{ mt: 3 }}
+                onClick={() => setQuizGameState({ view: 'ranking', data: null })}
+              >
+                Ver Ranking en Vivo
+              </Button>
             </Box>
           )}
 
@@ -1888,15 +2000,21 @@ function LessonPage() {
             </Box>
           )}
           
-          {/* === VISTA 5: RANKING (Parcial o Final) === */}
-          {(quizGameState.view === 'ranking' || quizGameState.view === 'final_results') && quizGameState.data && (
+          {(quizGameState.view === 'ranking' || quizGameState.view === 'final_results') && (
             <Box>
               <Typography variant="h5" color={quizGameState.view === 'final_results' ? "success.main" : "primary"} gutterBottom>
-                {quizGameState.view === 'final_results' ? "¡Resultados Finales!" : "Ranking"}
+                {quizGameState.view === 'final_results' ? "¡Resultados Finales!" : "Ranking en Vivo"}
               </Typography>
-              <List dense sx={{ mt: 2, textAlign: 'left' }}>
-                {/* ¡CORREGIDO! Lee 'data.ranking.map' */}
-                {quizGameState.data.ranking.map((player, index) => (
+              
+              <List dense sx={{ mt: 2, textAlign: 'left', maxHeight: 300, overflowY: 'auto' }}>
+                {/* Usamos 'quizStats' (que se actualiza en vivo) en lugar de 'quizGameState.data' */}
+                {(!quizStats || !quizStats.ranking || quizStats.ranking.length === 0) && (
+                  <Typography color="text.secondary" sx={{textAlign: 'center', p: 2}}>
+                    Aún no hay nadie en el ranking.
+                  </Typography>
+                )}
+                
+                {quizStats && quizStats.ranking && quizStats.ranking.map((player, index) => (
                   <ListItem key={index} sx={{ bgcolor: index < 3 ? 'action.hover' : 'transparent', borderRadius: 1, mb: 0.5 }}>
                     <ListItemIcon sx={{fontSize: '1.5rem'}}>
                       {index === 0 && '🥇'} {index === 1 && '🥈'} {index === 2 && '🥉'} {index > 2 && `${index + 1}.`}
@@ -1906,11 +2024,16 @@ function LessonPage() {
                   </ListItem>
                 ))}
               </List>
-              {quizGameState.view === 'final_results' && (
-                <Button variant="contained" fullWidth sx={{ mt: 3 }} onClick={() => setQuizGameState({ view: 'hidden', data: null })}>
-                  Cerrar
-                </Button>
-              )}
+              
+              {/* --- ¡BOTÓN AÑADIDO/MODIFICADO! --- */}
+              <Button 
+                variant={quizGameState.view === 'final_results' ? "contained" : "outlined"} 
+                fullWidth 
+                sx={{ mt: 3 }}
+                onClick={() => setQuizGameState({ view: 'hidden', data: null })}
+              >
+                Cerrar
+              </Button>
             </Box>
           )}
           
@@ -1922,45 +2045,29 @@ function LessonPage() {
               <Typography color="text.secondary">La siguiente pregunta está por comenzar...</Typography>
             </Box>
           )}
+          {/* === VISTA 7: DESAFÍO DE CÓDIGO (¡CON BOTÓN DE CERRAR!) === */}
           {quizGameState.view === 'code_challenge' && quizGameState.data && (
             <Box sx={{ textAlign: 'left' }}>
-              {/* --- Barra Regresiva --- */}
-              <LinearProgress 
-                variant="determinate" 
-                value={timerProgress} 
-                color="secondary"
-                sx={{ height: 10, borderRadius: 5, mb: 2, transition: 'transform 1s linear' }} 
-              />
-              
-              <Typography variant="h5" color="secondary" gutterBottom>
-                ¡Desafío de Código en Vivo!
-              </Typography>
+              <LinearProgress variant="determinate" value={timerProgress} color="secondary" sx={{ height: 10, borderRadius: 5, mb: 2 }} />
+              <Typography variant="h5" color="secondary" gutterBottom>¡Desafío de Código en Vivo!</Typography>
               <Typography variant="h6" sx={{ my: 2, fontWeight: 600 }}>
                 {quizGameState.data.challenge.title}
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, whiteSpace: 'pre-wrap' }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, whiteSpace: 'pre-wrap', maxHeight: 100, overflowY: 'auto' }}>
                 {quizGameState.data.challenge.description}
               </Typography>
               
-              {/* --- ¡TEXTFIELD CONECTADO! --- */}
-              <TextField
-                fullWidth
-                multiline
-                rows={10}
-                variant="filled"
-                label="Escribe tu solución aquí..."
-                value={codeSolution} // <-- Conectado al estado
-                onChange={(e) => setCodeSolution(e.target.value)} // <-- Conectado al estado
-                sx={{ mb: 2, '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
-              />
+              <Box sx={{ mb: 2, border: `1px solid ${theme.palette.divider}`, borderRadius: 1, overflow: 'hidden', fontSize: '0.9rem' }}>
+                <CodeMirror
+                  value={codeSolution}
+                  height="250px"
+                  theme={vscodeDark}
+                  extensions={[python()]}
+                  onChange={(value) => setCodeSolution(value)}
+                />
+              </Box>
               
-              {/* --- ¡BOTÓN CONECTADO! --- */}
-              <Button 
-                variant="contained" 
-                color="secondary" 
-                fullWidth
-                onClick={handleCodeSubmit} // <-- ¡Conectado al handler!
-              >
+              <Button variant="contained" color="secondary" fullWidth onClick={handleCodeSubmit}>
                 Enviar Solución
               </Button>
             </Box>
