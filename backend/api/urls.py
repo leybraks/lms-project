@@ -41,7 +41,10 @@ from .views import (
     create_live_code_challenge,
     get_lesson_live_quizzes,    # <-- ¡AÑADE ESTA!
     get_lesson_live_challenges, # <-- ¡ASEGÚRATE DE QUE ESTA LÍNEA EXISTA!
-
+    LessonResourceListCreateView,
+    LessonResourceDetailView,
+    CourseResourcesListView,
+    CourseStatusUpdateView,
     get_me_view # Importamos esta también, ya que existe en views.py
 ) 
 
@@ -98,6 +101,12 @@ urlpatterns = [
     path('lesson/<int:lesson_id>/create_live_challenge/', create_live_code_challenge, name='create_live_code_challenge'),
     path('lesson/<int:lesson_id>/live_quizzes/', get_lesson_live_quizzes, name='get_lesson_live_quizzes'),
     path('lesson/<int:lesson_id>/live_challenges/', get_lesson_live_challenges, name='get_lesson_live_challenges'),
+    path('lesson/<int:lesson_id>/resources/', LessonResourceListCreateView.as_view(), name='lesson-resources'),
+    path('lesson/<int:lesson_id>/resources/<int:pk>/', LessonResourceDetailView.as_view(), name='lesson-resource-detail'),
+    path('courses/<int:course_id>/all_resources/', CourseResourcesListView.as_view()),
+    path('courses/<int:pk>/status/', CourseStatusUpdateView.as_view()),
+    # Asegúrate de tener la ruta del gradebook también:
+    path('courses/<int:course_id>/gradebook/', GradebookView.as_view()),
     path('', include(router.urls)),
 ]
 if settings.DEBUG:

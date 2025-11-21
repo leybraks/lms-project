@@ -26,8 +26,8 @@ try:
 except Exception as e:
     print(f"ADVERTENCIA: No se pudo configurar la API de Gemini. {e}")
 # Imports de Modelos y Serializers de tu app
-from .models import Course, Enrollment, Lesson, LessonCompletion, Assignment, Submission, Quiz, User,Conversation, Message,LessonNote,ReadReceipt,CodeChallenge,Module,LiveCodeChallenge
-from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer, AssignmentSerializer, SubmissionSerializer, QuizSerializer,ConversationListSerializer,MessageSerializer, MessageCreateSerializer, LessonNoteSerializer, GradedItemSerializer,ReadReceiptSerializer,StudentListSerializer, Question, Choice,CodeChallengeSerializer,ModuleSerializer,ModuleChallengeSerializer,LiveCodeChallengeSerializer
+from .models import Course, Enrollment, Lesson, LessonCompletion, Assignment, Submission, Quiz, User,Conversation, Message,LessonNote,ReadReceipt,CodeChallenge,Module,LiveCodeChallenge,Resource
+from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer, AssignmentSerializer, SubmissionSerializer, QuizSerializer,ConversationListSerializer,MessageSerializer, MessageCreateSerializer, LessonNoteSerializer, GradedItemSerializer,ReadReceiptSerializer,StudentListSerializer, Question, Choice,CodeChallengeSerializer,ModuleSerializer,ModuleChallengeSerializer,LiveCodeChallengeSerializer,ResourceSerializer
 
 # ====================================================================
 # 1. Vistas de Cursos
@@ -1229,12 +1229,95 @@ def get_lesson_live_challenges(request, lesson_id):
     except Exception as e:
         return Response({'error': str(e)}, status=500)
 
+class LessonResourceListCreateView(generics.ListCreateAPIView):
+    serializer_class = ResourceSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        lesson_id = self.kwargs['lesson_id']
+        return Resource.objects.filter(lesson_id=lesson_id).order_by('-uploaded_at')
+
+    def perform_create(self, serializer):
+        lesson = get_object_or_404(Lesson, id=self.kwargs['lesson_id'])
+        
+        # --- DEPURACIÓN: IMPRIMIR QUÉ ESTÁ LLEGANDO ---
+        print(f"--- SUBIENDO ARCHIVO A LECCIÓN {lesson.id} ---")
+        file_obj = self.request.FILES.get('file')
+        
+        if file_obj:
+            print(f"Nombre: {file_obj.name}")
+            print(f"Tamaño detectado (bytes): {file_obj.size}")
+        else:
+            print("¡ALERTA! No se detectó archivo en request.FILES")
+        # ----------------------------------------------
+
+        file_size_str = "0 KB"
+
+        if file_obj:
+            try:
+                size_bytes = file_obj.size
+                
+                # Lógica de cálculo
+                if size_bytes < 1024:
+                    file_size_str = f"{size_bytes} Bytes"
+                elif size_bytes < 1024 * 1024:
+                    kb_size = size_bytes / 1024
+                    file_size_str = f"{round(kb_size, 1)} KB"
+                else:
+                    mb_size = size_bytes / (1024 * 1024)
+                    file_size_str = f"{round(mb_size, 1)} MB"
+            except Exception as e:
+                print(f"Error calculando tamaño: {e}")
+
+        # Guardamos
+        serializer.save(
+            lesson=lesson,
+            file_size=file_size_str
+        )
+
+
+class LessonResourceDetailView(generics.DestroyAPIView):
+    """
+    DELETE: Elimina un archivo específico.
+    """
+    queryset = Resource.objects.all()
+    serializer_class = ResourceSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        # Asegura que solo borres archivos de la lección correcta
+        return Resource.objects.filter(lesson_id=self.kwargs['lesson_id'])
 
 
 
+# 1. Vista para obtener TODOS los recursos de un curso (de todas sus lecciones)
+class CourseResourcesListView(generics.ListAPIView):
+    serializer_class = ResourceSerializer
+    permission_classes = [IsAuthenticated]
 
+    def get_queryset(self):
+        course_id = self.kwargs['course_id']
+        return Resource.objects.filter(lesson__module__course_id=course_id)\
+                               .select_related('lesson', 'lesson__module')\
+                               .order_by('lesson__module__order', 'lesson__order', '-uploaded_at')
 
+# 2. Vista para Archivar/Publicar Curso
+class CourseStatusUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
 
+    def patch(self, request, pk):
+        course = get_object_or_404(Course, id=pk)
+        # Solo el profesor dueño puede hacerlo
+        if course.professor != request.user:
+             return Response({"error": "No autorizado"}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Cambiar estado
+        new_status = request.data.get('is_published')
+        if new_status is not None:
+            course.is_published = new_status
+            course.save()
+            return Response({"status": "updated", "is_published": course.is_published})
+        return Response({"error": "Dato inválido"}, status=status.HTTP_400_BAD_REQUEST)
 
 
 

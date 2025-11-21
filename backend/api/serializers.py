@@ -44,15 +44,128 @@ class CourseBenefitSerializer(serializers.ModelSerializer):
 # NUEVO: Serializer de Recurso
 # ====================================================================
 class ResourceSerializer(serializers.ModelSerializer):
+    # Campos extra para mostrar dónde está el archivo
+    lesson_id = serializers.IntegerField(source='lesson.id', read_only=True)
+    lesson_title = serializers.CharField(source='lesson.title', read_only=True)
+    module_title = serializers.CharField(source='lesson.module.title', read_only=True)
+    module_order = serializers.IntegerField(source='lesson.module.order', read_only=True)
+    lesson_order = serializers.IntegerField(source='lesson.order', read_only=True)
+
     class Meta:
         model = Resource
-        fields = ['id', 'title', 'file']
+        fields = [
+            'id', 'title', 'file', 'uploaded_at', 'file_size', 
+            'lesson_id', 'lesson_title', 'module_title', 
+            'module_order', 'lesson_order'
+        ]
 
 # 1. Serializer de Usuario (Básico)
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'role','title', 'bio','experience_points']
+# ====================================================================
+# NUEVO: Serializer para Desafío de Código (Pilar 3)
+# ====================================================================
+class CodeChallengeSerializer(serializers.ModelSerializer):
+    """
+    Serializer para los desafíos de código.
+    No incluye la 'solution' para no enviársela al alumno.
+    """
+    class Meta:
+        model = CodeChallenge
+        fields = [
+            'id', 
+            'lesson', 
+            'title', 
+            'description', 
+            'starter_code', 
+            'order'
+        ]
+
+class LessonChallengeSerializer(serializers.ModelSerializer):
+    """
+    Un serializer simple para Lesson que anida sus CodeChallenges.
+    """
+    code_challenges = CodeChallengeSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Lesson
+        fields = ['id', 'title', 'order', 'code_challenges']
+
+class ModuleChallengeSerializer(serializers.ModelSerializer):
+    """
+    Un serializer para Module que anida sus Lecciones (con sus Desafíos).
+    ¡Esta es la estructura que tu "Mundo de Práctica" necesita!
+    """
+    # Usamos el nuevo serializer de lecciones
+    lessons = LessonChallengeSerializer(many=True, read_only=True) 
+
+    class Meta:
+        model = Module
+        fields = ['id', 'title', 'order', 'lessons']
+
+# ====================================================================
+# NUEVO: Serializer para Desafío de Código EN VIVO (Pilar 3B)
+# ====================================================================
+class LiveCodeChallengeSerializer(serializers.ModelSerializer):
+    """
+    Serializer para los desafíos de código en vivo (tipo Kahoot).
+    """
+    class Meta:
+        model = LiveCodeChallenge
+        fields = [
+            'id', 
+            'lesson', 
+            'title', 
+            'description', 
+            'starter_code', 
+            'solution' # ¡Importante! El profesor debe proveer la solución
+        ]
+        # Hacemos 'course' de solo lectura porque lo tomaremos de la URL
+        read_only_fields = ['lesson']
+
+# ====================================================================
+# 11. NUEVO: Serializer de Opción (Choice)
+# ====================================================================
+class ChoiceSerializer(serializers.ModelSerializer):
+    """
+    Muestra una opción de respuesta.
+    ¡Importante! NO incluimos el campo 'is_correct'.
+    """
+    class Meta:
+        model = Choice
+        fields = ['id', 'text'] # Solo el ID y el texto
+
+
+# ====================================================================
+# 12. NUEVO: Serializer de Pregunta (Question)
+# ====================================================================
+class QuestionSerializer(serializers.ModelSerializer):
+    """
+    Muestra una pregunta, anidando sus opciones.
+    """
+    # 'choices' es el related_name que definimos en el modelo Choice
+    choices = ChoiceSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Question
+        fields = ['id', 'text', 'order', 'choices']
+# ====================================================================
+# 13. NUEVO: Serializer de Examen (Quiz)
+# ====================================================================
+class QuizSerializer(serializers.ModelSerializer):
+    """
+    Muestra el examen completo, anidando sus preguntas (y sus opciones).
+    """
+    # 'questions' es el related_name que definimos en el modelo Question
+    questions = QuestionSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Quiz
+        # Enviamos toda la info que el frontend necesita
+        fields = ['id', 'module', 'title', 'due_date', 'max_attempts', 'questions']
+
 
 # 2. Serializer de Lección (El más interno)
 class LessonSerializer(serializers.ModelSerializer):
@@ -62,11 +175,14 @@ class LessonSerializer(serializers.ModelSerializer):
     next_lesson_id = serializers.SerializerMethodField()
     prev_lesson_id = serializers.SerializerMethodField()
     
-    resources = ResourceSerializer(many=True, read_only=True)
-    
-    # --- ¡¡¡AÑADE ESTE CAMPO!!! ---
-    # Esto envía el ID (un número) de la conversación de chat
+    # --- CAMPOS RELACIONADOS (HIJOS) ---
     chat_conversation = serializers.PrimaryKeyRelatedField(read_only=True) 
+    
+    # Aquí traemos todos los contenidos anidados
+    resources = ResourceSerializer(many=True, read_only=True)
+    live_quizzes = QuizSerializer(many=True, read_only=True)
+    live_code_challenges = LiveCodeChallengeSerializer(many=True, read_only=True)
+    code_challenges = CodeChallengeSerializer(many=True, read_only=True)
 
     class Meta:
         model = Lesson
@@ -75,11 +191,11 @@ class LessonSerializer(serializers.ModelSerializer):
             'live_session_room',
             'module_id', 'course_id',
             'next_lesson_id', 'prev_lesson_id',
-            'resources',
-            'chat_conversation' # <-- ¡AÑADIDO A LA LISTA!
+            'chat_conversation',
+            # Listas de contenidos
+            'resources', 'live_quizzes', 'live_code_challenges', 'code_challenges'
         ]
     
-    # --- (Si no tienes estas funciones, añádelas) ---
     def _get_adjacent_lesson(self, obj, direction='next'):
         if direction == 'next':
             query = Lesson.objects.filter(
@@ -98,14 +214,14 @@ class LessonSerializer(serializers.ModelSerializer):
 
     def get_prev_lesson_id(self, obj):
         return self._get_adjacent_lesson(obj, 'prev')
-    
 # 3. Serializer de Módulo (Anida Lecciones)
 class ModuleSerializer(serializers.ModelSerializer):
-    lessons = LessonSerializer(many=True, read_only=True)
-    quiz = serializers.PrimaryKeyRelatedField(read_only=True)
+    # Usamos el LessonSerializer COMPLETO que definimos arriba
+    lessons = LessonSerializer(many=True, read_only=True) 
+    
     class Meta:
         model = Module
-        fields = ['id', 'title', 'description', 'order', 'lessons','quiz']
+        fields = ['id', 'title', 'order', 'description', 'lessons']
 
 # 4. Serializer de Curso (Para la lista)
 class CourseSerializer(serializers.ModelSerializer):
@@ -132,40 +248,30 @@ class CourseSerializer(serializers.ModelSerializer):
 
 # 5. Serializer de Detalle de Curso (Anida Módulos)
 class CourseDetailSerializer(serializers.ModelSerializer):
-    modules = ModuleSerializer(many=True, read_only=True)
+    # Conecta con la cadena de arriba
+    modules = ModuleSerializer(many=True, read_only=True) 
+    professor = UserSerializer(read_only=True)
     
-    # --- ¡NUEVOS CAMPOS! ---
-    # Asume que tu modelo 'Course' tiene un FK a 'professor'
-    professor = UserSerializer(read_only=True) 
-    
-    # Esto es más complejo, tendrías que añadir 
-    # modelos 'Requirement' y 'LearningObjective'
-    requirements = serializers.SerializerMethodField()
-    learning_objectives = serializers.SerializerMethodField()
+    # Usamos los modelos reales (Borré tus get_requirements hardcodeados para usar la BD)
     learning_objectives = LearningObjectiveSerializer(many=True, read_only=True)
     requirements = RequirementSerializer(many=True, read_only=True)
     benefits = CourseBenefitSerializer(many=True, read_only=True)
+    
+    # Campo calculado para el Frontend (lo usas en el Hero section)
+    enrollments_count = serializers.SerializerMethodField()
+
     class Meta:
         model = Course
         fields = [
             'id', 'title', 'description', 'created_at', 'modules', 
-            'professor', # <-- Nuevo
-            'requirements', # <-- Nuevo
-            'learning_objectives', # <-- Nuevo
-            'main_image_url', 
-            'estimated_duration',
-            'learning_objectives',
-            'requirements',
-            'benefits'
+            'professor', 
+            'main_image_url', 'estimated_duration',
+            'learning_objectives', 'requirements', 'benefits',
+            'enrollments_count' # <-- Agregado
         ]
 
-    def get_requirements(self, obj):
-        # Lógica para obtener la lista de requisitos
-        return ["Requisito 1 (desde la API)", "Requisito 2 (desde la API)"]
-    
-    def get_learning_objectives(self, obj):
-        # Lógica para obtener los objetivos
-        return ["Objetivo 1 (desde la API)", "Objetivo 2 (desde la API)"]
+    def get_enrollments_count(self, obj):
+        return obj.enrollments.count()
     
 # 6. Serializer de Inscripción (Enrollment)
 class EnrollmentSerializer(serializers.ModelSerializer):
@@ -262,46 +368,8 @@ class GradeSerializer(serializers.ModelSerializer):
         model = Grade
         fields = ['id', 'submission', 'score', 'comments', 'graded_at']
 
-# ====================================================================
-# 11. NUEVO: Serializer de Opción (Choice)
-# ====================================================================
-class ChoiceSerializer(serializers.ModelSerializer):
-    """
-    Muestra una opción de respuesta.
-    ¡Importante! NO incluimos el campo 'is_correct'.
-    """
-    class Meta:
-        model = Choice
-        fields = ['id', 'text'] # Solo el ID y el texto
 
-# ====================================================================
-# 12. NUEVO: Serializer de Pregunta (Question)
-# ====================================================================
-class QuestionSerializer(serializers.ModelSerializer):
-    """
-    Muestra una pregunta, anidando sus opciones.
-    """
-    # 'choices' es el related_name que definimos en el modelo Choice
-    choices = ChoiceSerializer(many=True, read_only=True)
 
-    class Meta:
-        model = Question
-        fields = ['id', 'text', 'order', 'choices']
-
-# ====================================================================
-# 13. NUEVO: Serializer de Examen (Quiz)
-# ====================================================================
-class QuizSerializer(serializers.ModelSerializer):
-    """
-    Muestra el examen completo, anidando sus preguntas (y sus opciones).
-    """
-    # 'questions' es el related_name que definimos en el modelo Question
-    questions = QuestionSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = Quiz
-        # Enviamos toda la info que el frontend necesita
-        fields = ['id', 'module', 'title', 'due_date', 'max_attempts', 'questions']
 
 # ====================================================================
 # ACTUALIZADO: Serializer de Mensaje (para leer)
@@ -494,66 +562,6 @@ class StudentListSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'first_name', 'last_name', 'experience_points']
 
 
-# ====================================================================
-# NUEVO: Serializer para Desafío de Código (Pilar 3)
-# ====================================================================
-class CodeChallengeSerializer(serializers.ModelSerializer):
-    """
-    Serializer para los desafíos de código.
-    No incluye la 'solution' para no enviársela al alumno.
-    """
-    class Meta:
-        model = CodeChallenge
-        fields = [
-            'id', 
-            'lesson', 
-            'title', 
-            'description', 
-            'starter_code', 
-            'order'
-        ]
-
-class LessonChallengeSerializer(serializers.ModelSerializer):
-    """
-    Un serializer simple para Lesson que anida sus CodeChallenges.
-    """
-    code_challenges = CodeChallengeSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = Lesson
-        fields = ['id', 'title', 'order', 'code_challenges']
-
-class ModuleChallengeSerializer(serializers.ModelSerializer):
-    """
-    Un serializer para Module que anida sus Lecciones (con sus Desafíos).
-    ¡Esta es la estructura que tu "Mundo de Práctica" necesita!
-    """
-    # Usamos el nuevo serializer de lecciones
-    lessons = LessonChallengeSerializer(many=True, read_only=True) 
-
-    class Meta:
-        model = Module
-        fields = ['id', 'title', 'order', 'lessons']
-
-# ====================================================================
-# NUEVO: Serializer para Desafío de Código EN VIVO (Pilar 3B)
-# ====================================================================
-class LiveCodeChallengeSerializer(serializers.ModelSerializer):
-    """
-    Serializer para los desafíos de código en vivo (tipo Kahoot).
-    """
-    class Meta:
-        model = LiveCodeChallenge
-        fields = [
-            'id', 
-            'lesson', 
-            'title', 
-            'description', 
-            'starter_code', 
-            'solution' # ¡Importante! El profesor debe proveer la solución
-        ]
-        # Hacemos 'course' de solo lectura porque lo tomaremos de la URL
-        read_only_fields = ['lesson']
 
 
 

@@ -39,7 +39,10 @@ import {
   FormControl, 
   InputLabel,
   LinearProgress, // <-- ¡Importado para la Mascota!
-  Modal
+  Modal,
+  Drawer, 
+  Badge,
+  Grid
 } from '@mui/material';
 
 // --- Iconos ---
@@ -471,266 +474,442 @@ const LessonNotes = ({ theme, lessonId }) => {
   );
 };
 
-// --- Componente Maqueta (PanelProfesor) ---
-// --- ¡¡¡COMPONENTE "PANEL DE PROFESOR" FUNCIONAL!!! ---
-// --- ¡REEMPLAZA TU 'ProfessorPanel' CON ESTA VERSIÓN COMPLETA! ---
-// --- ¡REEMPLAZA TU 'ProfessorPanel' CON ESTE CÓDIGO COMPLETO! ---
-
+// --- PROFESSOR PANEL (VERSIÓN INTEGRADA / TRANSPARENTE) ---
 const ProfessorPanel = ({ 
   theme, 
-  onGiveXp,
-  contacts, 
-  courseId, 
-  lessonId, // <-- ¡NUEVA PROP!
-  connectedIds,
-  sendJsonMessage,
-  websocketReadyState,
+  gameInProgress, 
+  handleEndGameParent, 
+  onOpenDrawer, 
   quizStats 
 }) => {
-  const navigate = useNavigate();
 
-  // --- Estados de los Desafíos ---
-  const [liveQuizzes, setLiveQuizzes] = useState([]);
-  const [liveChallenges, setLiveChallenges] = useState([]);
-  
-  const [loading, setLoading] = useState(true);
-  
-  // Estados de selección
-  const [selectedQuizId, setSelectedQuizId] = useState(null);
-  const [selectedChallengeId, setSelectedChallengeId] = useState(null);
-  
-  const [gameInProgress, setGameInProgress] = useState(null); // 'quiz' o 'challenge'
-
-  // 1. Cargar Quizzes Y Desafíos de ESTA lección
-  useEffect(() => {
-    const fetchLessonActivities = async () => {
-      if (!lessonId) return;
-      
-      setLoading(true);
-      try {
-        // Llama a ambas APIs nuevas
-        const [quizResponse, challengeResponse] = await Promise.all([
-          axiosInstance.get(`/api/lesson/${lessonId}/live_quizzes/`),
-          axiosInstance.get(`/api/lesson/${lessonId}/live_challenges/`)
-        ]);
-        
-        setLiveQuizzes(quizResponse.data);
-        setLiveChallenges(challengeResponse.data);
-        
-      } catch (error) {
-        console.error("Error al cargar actividades en vivo:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchLessonActivities();
-  }, [lessonId]); // Se ejecuta si la lección cambia
-
-  // --- Handlers para Lanzar Juegos ---
-
-  const handleLaunchQuiz = () => {
-    if (websocketReadyState !== ReadyState.OPEN || !selectedQuizId) return;
-
-    const payload = {
-      message_type: "START_QUIZ",
-      quiz_id: selectedQuizId
-    };
-    sendJsonMessage(payload);
-    setGameInProgress('quiz'); // Bloquea los botones
-  };
-  
-  // ¡NUEVA FUNCIÓN!
-  const handleLaunchCodeChallenge = () => {
-    if (websocketReadyState !== ReadyState.OPEN || !selectedChallengeId) return;
-
-    // ¡NUEVO EVENTO! que añadiremos al consumer
-    const payload = {
-      message_type: "START_CODE_CHALLENGE",
-      challenge_id: selectedChallengeId
-    };
-    sendJsonMessage(payload);
-    setGameInProgress('challenge'); // Bloquea los botones
-  };
-
-  const handleEndGame = () => {
-    setGameInProgress(null);
-    setSelectedQuizId(null);
-    setSelectedChallengeId(null);
-    // (Aquí podrías enviar un evento 'END_GAME' al consumer)
-  };
-
-  // --- Renderizado del Panel ---
   return (
-    <>
-      {/* Botones Principales (Finalizar / Calificaciones) */}
-      <motion.div variants={itemVariants}>
-        <Paper sx={{...glassPaperStyle(theme), p: 3, boxShadow: 'none', background: 'none'}}>
-          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-            Panel del Profesor
-          </Typography>
-          <Button fullWidth variant="contained" color="secondary" size="large" sx={{mb: 2}}>
-            Finalizar Clase para Todos
-          </Button>
-          <Button 
-            fullWidth 
-            variant="outlined" 
-            size="small" 
-            component={RouterLink}
-            to={`/courses/${courseId}/grades`}
-            startIcon={<GradeIcon />}
-          >
-            Ver Libro de Calificaciones
-          </Button>
-        </Paper>
-      </motion.div>
-
-      {/* --- Carga de Actividades --- */}
-      {loading && <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', mt: 2 }} />}
-
-      {/* --- Sección del Pilar 2 (Quiz en Vivo) --- */}
-      <motion.div variants={itemVariants}>
-        <Paper sx={{...glassPaperStyle(theme), p: 3, mt: 3, boxShadow: 'none', background: 'none'}}>
-          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-            Desafío en Vivo (Quiz)
-          </Typography>
-          
-          {gameInProgress === 'quiz' ? (
-            // Vista de "Juego en Progreso"
-            <Box>
-              <Alert severity="info">¡Quiz en progreso!</Alert>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 2, mb: 1 }}>
-                Total de respuestas: {quizStats ? quizStats.total : 0}
+    <motion.div 
+      variants={itemVariants} 
+      style={{ height: '100%' }}
+    >
+      {/* CAMBIO CLAVE: 
+          1. Usamos Box en lugar de Paper.
+          2. Quitamos 'glassPaperStyle' porque el contenedor padre (TabPanel) ya lo tiene.
+          3. Quitamos bordes y sombras externas.
+      */}
+      <Box 
+        sx={{
+          p: 3, // Padding interno para que el texto no toque los bordes
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          overflowY: 'auto', // Scroll interno si el contenido es muy largo
+          // Opcional: Si quieres ocultar la barra de scroll fea
+          ...getScrollbarStyles(theme) 
+        }}
+      >
+        
+        {/* 1. CABECERA */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Box>
+            <Typography variant="h5" sx={{ fontWeight: 800, color: 'primary.main', letterSpacing: -0.5 }}>
+              Panel de Control
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: gameInProgress ? 'error.main' : 'success.main', boxShadow: gameInProgress ? '0 0 8px red' : '0 0 8px green' }} />
+              <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>
+                {gameInProgress ? 'EN VIVO' : 'SALA ESPERANDO'}
               </Typography>
-              {/* (Aquí va el gráfico de barras que ya tenías) */}
-              <Button sx={{mt: 3}} variant="outlined" color="error" onClick={handleEndGame}>
-                Terminar Quiz
-              </Button>
             </Box>
-          ) : (
-            // Vista de "Seleccionar Juego"
-            <Box sx={{display: 'flex', flexDirection: 'column', gap: 2}}>
-              <FormControl fullWidth size="small" disabled={gameInProgress !== null}>
-                <InputLabel>Selecciona un Quiz...</InputLabel>
-                <Select
-                  label="Selecciona un Quiz..."
-                  onChange={(e) => setSelectedQuizId(e.target.value)}
-                  value={selectedQuizId || ""}
-                >
-                  {liveQuizzes.length === 0 && <MenuItem disabled>No hay quizzes para esta lección</MenuItem>}
-                  {liveQuizzes.map(quiz => (
-                    <MenuItem key={quiz.id} value={quiz.id}>
-                      {quiz.title}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <Button 
-                variant="contained"
-                onClick={handleLaunchQuiz} 
-                disabled={!selectedQuizId || websocketReadyState !== ReadyState.OPEN || gameInProgress !== null}
-                startIcon={<EmojiEventsIcon />}
-              >
-                Lanzar Quiz
-              </Button>
-            </Box>
-          )}
-        </Paper>
-      </motion.div>
-
-      {/* --- ¡NUEVO! Sección del Pilar 3B (Code Kahoot) --- */}
-      <motion.div variants={itemVariants}>
-        <Paper sx={{...glassPaperStyle(theme), p: 3, mt: 3, boxShadow: 'none', background: 'none'}}>
-          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-            Desafío de Código en Vivo
-          </Typography>
-          
-          {gameInProgress === 'challenge' ? (
-            // Vista de "Juego en Progreso"
-            <Box>
-              <Alert severity="info">¡Desafío de código en progreso!</Alert>
-              {/* (Aquí irá el ranking en vivo) */}
-              <Button sx={{mt: 3}} variant="outlined" color="error" onClick={handleEndGame}>
-                Terminar Desafío
-              </Button>
-            </Box>
-          ) : (
-            // Vista de "Seleccionar Juego"
-            <Box sx={{display: 'flex', flexDirection: 'column', gap: 2}}>
-              <FormControl fullWidth size="small" disabled={gameInProgress !== null}>
-                <InputLabel>Selecciona un Desafío...</InputLabel>
-                <Select
-                  label="Selecciona un Desafío..."
-                  onChange={(e) => setSelectedChallengeId(e.target.value)}
-                  value={selectedChallengeId || ""}
-                >
-                  {liveChallenges.length === 0 && <MenuItem disabled>No hay desafíos para esta lección</MenuItem>}
-                  {liveChallenges.map(challenge => (
-                    <MenuItem key={challenge.id} value={challenge.id}>
-                      {challenge.title}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <Button 
-                variant="contained"
-                color="secondary" // Color diferente
-                onClick={handleLaunchCodeChallenge} 
-                disabled={!selectedChallengeId || websocketReadyState !== ReadyState.OPEN || gameInProgress !== null}
-                startIcon={<TerminalIcon />}
-              >
-                Lanzar Desafío IA
-              </Button>
-            </Box>
-          )}
-        </Paper>
-      </motion.div>
-
-      {/* Sección del Pilar 1 (Alumnos Conectados) */}
-      <motion.div variants={itemVariants}>
-        <Paper sx={{...glassPaperStyle(theme), p: 3, mt: 3, height: 400, display: 'flex', flexDirection: 'column', boxShadow: 'none', background: 'none'}}>
-          <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
-            Alumnos Conectados ({contacts.length})
-          </Typography>
-          <Box sx={{flex: 1, overflowY: 'auto', ...getScrollbarStyles(theme)}}>
-            <List>
-              {contacts.map(contact => {
-                const isConnected = connectedIds.has(contact.id);
-                return (
-                  <ListItem key={contact.id}>
-                    <ListItemAvatar><Avatar sx={{bgcolor: 'primary.light'}}>{contact.username[0]}</Avatar></ListItemAvatar>
-                    <ListItemText 
-                      primary={contact.username}
-                      secondary={
-                        <Typography 
-                          component="span" 
-                          variant="body2" 
-                          color={isConnected ? 'success.main' : 'text.secondary'}
-                          sx={{display: 'flex', alignItems: 'center', gap: 0.5}}
-                        >
-                          <Box sx={{width: 8, height: 8, borderRadius: '50%', bgcolor: isConnected ? 'success.main' : 'text.secondary'}} />
-                          {isConnected ? 'Conectado' : 'Desconectado'}
-                        </Typography>
-                      }
-                    />
-                    <Tooltip title="Premiar mascota (+10 XP)">
-                      <IconButton 
-                        color="warning" 
-                        onClick={() => onGiveXp(contact.id, 10)}
-                      >
-                        <EmojiEventsIcon />
-                      </IconButton>
-                    </Tooltip>
-                  </ListItem>
-                );
-              })}
-            </List>
           </Box>
-        </Paper>
-      </motion.div>
-    </>
+          
+          <Button 
+            variant="contained" 
+            size="medium"
+            startIcon={<AssessmentIcon />}
+            onClick={onOpenDrawer}
+            sx={{ 
+                borderRadius: 3, 
+                // Un gradiente sutil para que destaque sin ser "otra tarjeta"
+                background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
+                boxShadow: '0 3px 10px rgba(33, 203, 243, .3)',
+                fontWeight: 700
+            }}
+          >
+            Herramientas
+          </Button>
+        </Box>
+
+        {/* 2. ZONA DE ACCIÓN (Hero Section) */}
+        <Box sx={{ mb: 4 }}> 
+            {/* Esta tarjeta interna SÍ mantiene su fondo para destacar del resto */}
+            <Paper 
+                elevation={0} 
+                sx={{ 
+                    p: 4, 
+                    // Fondo sutil que se mezcla mejor
+                    bgcolor: gameInProgress ? 'rgba(244, 67, 54, 0.08)' : 'rgba(255, 255, 255, 0.03)', 
+                    border: '1px dashed', 
+                    borderColor: gameInProgress ? 'error.main' : 'divider',
+                    borderRadius: 4,
+                    textAlign: 'center',
+                    transition: 'all 0.3s ease'
+                }}
+            >
+              {gameInProgress === 'quiz' && (
+                <>
+                    <CircularProgress size={40} color="primary" thickness={5} sx={{ mb: 2 }} />
+                    <Typography variant="h4" sx={{ fontWeight: 800, mb: 1 }}>Quiz en Curso</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                       Monitorizando respuestas en tiempo real...
+                    </Typography>
+                    <Button variant="contained" color="error" onClick={handleEndGameParent}>
+                        Terminar Quiz
+                    </Button>
+                </>
+              )}
+
+              {gameInProgress === 'challenge' && (
+                <>
+                    <CircularProgress size={40} color="secondary" thickness={5} sx={{ mb: 2 }} />
+                    <Typography variant="h4" sx={{ fontWeight: 800, mb: 1 }}>Desafío IA</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        Los alumnos están programando...
+                    </Typography>
+                    <Button variant="contained" color="error" onClick={handleEndGameParent}>
+                        Terminar Desafío
+                    </Button>
+                </>
+              )}
+
+              {!gameInProgress && (
+                <Box sx={{ py: 2 }}>
+                    <LiveTvIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1, opacity: 0.3 }} />
+                    <Typography variant="h6" color="text.secondary" sx={{fontWeight: 600}}>
+                        Sin actividad activa
+                    </Typography>
+                    <Typography variant="body2" color="text.disabled" sx={{ maxWidth: 300, mx: 'auto', mt: 1 }}>
+                        Usa el botón <b>Herramientas</b> (arriba) para lanzar una actividad a la clase.
+                    </Typography>
+                </Box>
+              )}
+            </Paper>
+        </Box>
+
+        {/* 3. HISTORIAL (Integrado sin bordes extraños) */}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <Typography variant="overline" sx={{ fontWeight: 700, color: 'text.secondary', mb: 1, letterSpacing: 1 }}>
+                HISTORIAL RECIENTE
+            </Typography>
+            
+            {/* Usamos un fondo oscuro sólido para el log, como en tu imagen, pero sin bordes externos */}
+            <Paper 
+                elevation={0}
+                sx={{ 
+                    flex: 1, 
+                    bgcolor: '#1e1e1e', // Color oscuro sólido (ajusta si usas tema claro)
+                    borderRadius: 3, 
+                    p: 0,
+                    overflow: 'hidden'
+                }}
+            >
+                <List sx={{ width: '100%', bgcolor: 'transparent' }}>
+                    <ListItem>
+                        <ListItemIcon sx={{ minWidth: 40 }}>
+                            <CheckCircleIcon color="success" fontSize="small" />
+                        </ListItemIcon>
+                        <ListItemText 
+                            primary={<Typography variant="body2" sx={{color: '#fff', fontWeight: 500}}>Clase iniciada correctamente</Typography>}
+                            secondary={<Typography variant="caption" sx={{color: 'grey.500'}}>Hace 15 min</Typography>} 
+                        />
+                    </ListItem>
+                    <Divider variant="inset" component="li" sx={{ borderColor: 'rgba(255,255,255,0.1)' }} />
+                    <ListItem>
+                        <ListItemIcon sx={{ minWidth: 40 }}>
+                            <PeopleIcon color="primary" fontSize="small" />
+                        </ListItemIcon>
+                        <ListItemText 
+                            primary={<Typography variant="body2" sx={{color: '#fff', fontWeight: 500}}>Lista de asistencia actualizada</Typography>}
+                            secondary={<Typography variant="caption" sx={{color: 'grey.500'}}>Hace 2 min</Typography>} 
+                        />
+                    </ListItem>
+                </List>
+            </Paper>
+        </Box>
+
+      </Box>
+    </motion.div>
   );
 };
+// --- NUEVO COMPONENTE: CAJA DE HERRAMIENTAS (DRAWER) ---
+// --- TOOLS DRAWER CORREGIDO ---
+// --- COMPONENTE TOOLS DRAWER (COMPLETO) ---
+const ToolsDrawer = ({ 
+  open, onClose, theme, user, contacts, connectedIds, onGiveXp, 
+  liveQuizzes, liveChallenges, onLaunchQuiz, onLaunchChallenge,
+  lessonId 
+}) => {
+  const [currentTab, setCurrentTab] = useState(0);
+  const isProfessor = user.role === 'PROFESSOR';
+  
+  // Estados internos
+  const [resources, setResources] = useState([]);
+  const [uploading, setUploading] = useState(false);
 
+  // 1. Cargar archivos al abrir el Drawer
+  useEffect(() => {
+    if (open && lessonId) {
+        fetchResources();
+    }
+  }, [open, lessonId]);
+
+  // Función para obtener archivos desde el backend
+  const fetchResources = async () => {
+    try {
+        const res = await axiosInstance.get(`/api/lesson/${lessonId}/resources/`);
+        setResources(res.data);
+    } catch (err) { console.error("Error cargando recursos", err); }
+  };
+
+  // --- AQUÍ ESTÁ LA FUNCIÓN QUE FALTABA ---
+  const handleFileUpload = async (event) => {
+    const files = Array.from(event.target.files);
+    if (files.length === 0) return;
+
+    setUploading(true);
+    
+    for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('title', file.name); 
+        
+        try {
+            // Ajusta la URL si tu backend usa otra ruta
+            await axiosInstance.post(`/api/lesson/${lessonId}/resources/`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+        } catch (err) {
+            console.error("Error subiendo archivo:", file.name, err);
+            alert(`Error subiendo ${file.name}`);
+        }
+    }
+    
+    setUploading(false);
+    fetchResources(); // Recargar la lista para ver el nuevo archivo
+  };
+  // -----------------------------------------
+
+  // Función para borrar archivos
+  const handleDeleteResource = async (resourceId) => {
+      // eslint-disable-next-line no-restricted-globals
+      if(!confirm("¿Estás seguro de borrar este archivo?")) return;
+      try {
+          await axiosInstance.delete(`/api/lesson/${lessonId}/resources/${resourceId}/`);
+          setResources(resources.filter(r => r.id !== resourceId));
+      } catch(err) { console.error(err); }
+  };
+
+  return (
+    <Drawer
+      anchor="right"
+      open={open}
+      onClose={onClose}
+      sx={{ zIndex: 9999 }} 
+      PaperProps={{ sx: { width: { xs: '100%', md: 500 }, bgcolor: 'background.paper' } }}
+    >
+      {/* CABECERA */}
+      <Box sx={{ p: 3, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: 'primary.main', color: 'primary.contrastText' }}>
+        <Typography variant="h6" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
+           <AssessmentIcon /> Herramientas de Clase
+        </Typography>
+        <IconButton onClick={onClose} sx={{ color: 'inherit' }}><NavigateNextIcon /></IconButton>
+      </Box>
+
+      {/* TABS */}
+      <Tabs 
+        value={currentTab} 
+        onChange={(e, v) => setCurrentTab(v)} 
+        variant="fullWidth" 
+        indicatorColor="primary"
+        textColor="primary"
+        sx={{ borderBottom: 1, borderColor: 'divider' }}
+      >
+        <Tab icon={<PeopleIcon />} label="Alumnos" />
+        <Tab icon={<CloudDownloadIcon />} label="Archivos" />
+        {isProfessor && <Tab icon={<EmojiEventsIcon />} label="Actividades" />}
+      </Tabs>
+
+      <Box sx={{ flex: 1, overflowY: 'auto' }}>
+        
+        {/* TAB 1: ALUMNOS */}
+        {currentTab === 0 && (
+          <List sx={{ p: 0 }}>
+            <Box sx={{ p: 2, bgcolor: 'action.hover' }}>
+                <Typography variant="subtitle2" color="text.secondary">
+                    Total Conectados: {connectedIds ? connectedIds.size : 0} / {contacts ? contacts.length : 0}
+                </Typography>
+            </Box>
+            {contacts && contacts.map(contact => {
+              const isConnected = connectedIds && connectedIds.has(contact.id);
+              return (
+                <ListItem 
+                  key={contact.id} 
+                  divider
+                  secondaryAction={
+                    isProfessor && (
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Tooltip title="Dar Puntos">
+                            <IconButton onClick={() => onGiveXp(contact.id, 10)} color="primary" size="small">
+                                <EmojiEventsIcon />
+                            </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Marcar Falta">
+                            <IconButton color="error" size="small">
+                                <DeleteIcon />
+                            </IconButton>
+                        </Tooltip>
+                      </Box>
+                    )
+                  }
+                >
+                  <ListItemAvatar>
+                    <Badge 
+                      overlap="circular" 
+                      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                      variant="dot"
+                      color={isConnected ? "success" : "error"}
+                    >
+                      <Avatar sx={{ bgcolor: isConnected ? 'primary.main' : 'grey.500' }}>
+                        {contact.username && contact.username[0].toUpperCase()}
+                      </Avatar>
+                    </Badge>
+                  </ListItemAvatar>
+                  <ListItemText 
+                    primary={contact.username} 
+                    secondary={isConnected ? "En línea" : "Desconectado"}
+                    sx={{ mr: 8 }} 
+                  />
+                </ListItem>
+              );
+            })}
+          </List>
+        )}
+
+        {/* TAB 2: ARCHIVOS */}
+        {currentTab === 1 && (
+            <Box sx={{ p: 3 }}>
+                {/* ZONA DE CARGA (SOLO PROFESOR) */}
+                {isProfessor && (
+                    <Box sx={{ 
+                        p: 3, border: '2px dashed', borderColor: uploading ? 'primary.main' : 'divider', 
+                        borderRadius: 2, textAlign: 'center', bgcolor: 'action.hover', 
+                        cursor: uploading ? 'wait' : 'pointer', mb: 3, transition: '0.3s'
+                    }}>
+                        {uploading ? (
+                            <Box>
+                                <CircularProgress size={24} sx={{mb: 1}} />
+                                <Typography>Subiendo archivos...</Typography>
+                            </Box>
+                        ) : (
+                            <>
+                                <input 
+                                    type="file" 
+                                    multiple 
+                                    id="drawer-file-upload" 
+                                    style={{ display: 'none' }} 
+                                    // AQUÍ SE LLAMA A LA FUNCIÓN QUE DABA ERROR
+                                    onChange={handleFileUpload}
+                                />
+                                <label htmlFor="drawer-file-upload" style={{ width: '100%', height: '100%', display: 'block', cursor: 'pointer' }}>
+                                    <CloudDownloadIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
+                                    <Typography variant="h6" color="text.primary">Subir Material</Typography>
+                                    <Typography variant="body2" color="text.secondary">Clic para seleccionar</Typography>
+                                </label>
+                            </>
+                        )}
+                    </Box>
+                )}
+
+                <Typography variant="overline" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                    ARCHIVOS DISPONIBLES ({resources.length})
+                </Typography>
+                
+                <List>
+                    {resources.length === 0 && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 2, textAlign: 'center' }}>
+                            No hay archivos compartidos aún.
+                        </Typography>
+                    )}
+                    {resources.map((file) => (
+                        <ListItem 
+                            key={file.id} 
+                            sx={{ bgcolor: 'background.default', mb: 1, borderRadius: 1 }}
+                            secondaryAction={
+                                isProfessor ? (
+                                    <IconButton edge="end" color="error" onClick={() => handleDeleteResource(file.id)}>
+                                        <DeleteIcon />
+                                    </IconButton>
+                                ) : (
+                                    <IconButton edge="end" color="primary" component="a" href={file.file} target="_blank" download>
+                                        <CloudDownloadIcon />
+                                    </IconButton>
+                                )
+                            }
+                        >
+                            <ListItemIcon>
+                                <InsertDriveFileIcon color="action" />
+                            </ListItemIcon>
+                            <ListItemText 
+                                primary={file.title} 
+                                secondary={new Date(file.uploaded_at).toLocaleDateString()} 
+                                primaryTypographyProps={{ fontWeight: 500 }}
+                            />
+                        </ListItem>
+                    ))}
+                </List>
+            </Box>
+        )}
+
+        {/* TAB 3: ACTIVIDADES (SOLO PROFESOR) */}
+        {currentTab === 2 && isProfessor && (
+          <Box sx={{ p: 3 }}>
+            <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700 }}>
+                QUIZZES RÁPIDOS
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 4, mt: 1 }}>
+              {liveQuizzes && liveQuizzes.map(quiz => (
+                <Chip 
+                  key={quiz.id} 
+                  label={quiz.title} 
+                  onClick={() => { onLaunchQuiz(quiz.id); }}
+                  icon={<EmojiEventsIcon />}
+                  color="primary"
+                  clickable
+                  sx={{ py: 2 }} 
+                />
+              ))}
+              {(!liveQuizzes || liveQuizzes.length === 0) && <Alert severity="info" sx={{ width: '100%' }}>No hay quizzes creados.</Alert>}
+            </Box>
+
+            <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700 }}>
+                DESAFÍOS DE CÓDIGO (IA)
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
+              {liveChallenges && liveChallenges.map(ch => (
+                <Chip 
+                  key={ch.id} 
+                  label={ch.title} 
+                  onClick={() => { onLaunchChallenge(ch.id); }}
+                  icon={<TerminalIcon />}
+                  color="secondary"
+                  clickable
+                  sx={{ py: 2 }}
+                />
+              ))}
+               {(!liveChallenges || liveChallenges.length === 0) && <Alert severity="info" sx={{ width: '100%' }}>No hay desafíos creados.</Alert>}
+            </Box>
+          </Box>
+        )}
+      </Box>
+    </Drawer>
+  );
+};
 // === COMPONENTE PRINCIPAL ===
 function LessonPage() {
   const { courseId, lessonId } = useParams(); 
@@ -740,7 +919,7 @@ function LessonPage() {
   const fileInputRef = useRef(null); 
   console.log("USER DESDE AUTHCONTEXT:", user);
   const isProfessor = user.role === 'PROFESSOR';
-
+  const [gameInProgress, setGameInProgress] = useState(null);
   // --- Estados de la Lección ---
   const [lesson, setLesson] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -761,7 +940,6 @@ function LessonPage() {
   const [quiz, setQuiz] = useState(null);
   const [quizAttempt, setQuizAttempt] = useState(null);
   const [loadingQuiz, setLoadingQuiz] = useState(true); 
-
   // Estados de UI
   const [sideTabValue, setSideTabValue] = useState(0);
   const [mainTabValue, setMainTabValue] = useState(0);
@@ -781,6 +959,11 @@ function LessonPage() {
   const [selectedChoiceId, setSelectedChoiceId] = useState(null);
   const timerRef = useRef(null);
   const [codeSolution, setCodeSolution] = useState("");
+
+  const [drawerOpen, setDrawerOpen] = useState(false); // <--- ESTADO DEL DRAWER
+  const [liveQuizzes, setLiveQuizzes] = useState([]);      // <--- Mover aquí la carga
+  const [liveChallenges, setLiveChallenges] = useState([]);
+
   if (authLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
@@ -864,7 +1047,16 @@ function LessonPage() {
             setLoadingQuiz(false);
           }
         })();
-
+        if (user.role === 'PROFESSOR') {
+            try {
+                const [qRes, cRes] = await Promise.all([
+                    axiosInstance.get(`/api/lesson/${lessonId}/live_quizzes/`),
+                    axiosInstance.get(`/api/lesson/${lessonId}/live_challenges/`)
+                ]);
+                setLiveQuizzes(qRes.data);
+                setLiveChallenges(cRes.data);
+            } catch (err) { console.error("Error cargando actividades", err); }
+        }
       } catch (err) {
         console.error("Error al cargar la lección:", err);
         setError("Error al cargar el contenido de la lección.");
@@ -967,20 +1159,57 @@ function LessonPage() {
   const handleRemoveFile = () => {
     setFileToUpload(null);
   };
+
+  const handleLaunchQuiz = (quizId) => {
+    // Verificamos conexión
+    if (readyState === ReadyState.OPEN) {
+      sendJsonMessage({ 
+        message_type: "START_QUIZ", 
+        quiz_id: quizId 
+      });
+      setGameInProgress('quiz'); // Actualizamos estado visual
+      setDrawerOpen(false);      // Cerramos el menú automáticamente
+      setSnackbarMessage("¡Quiz iniciado!");
+      setSnackbarOpen(true);
+    } else {
+      alert("Error de conexión con el servidor.");
+    }
+  };
+
+  const handleLaunchChallenge = (challengeId) => {
+    if (readyState === ReadyState.OPEN) {
+      sendJsonMessage({ 
+        message_type: "START_CODE_CHALLENGE", 
+        challenge_id: challengeId 
+      });
+      setGameInProgress('challenge');
+      setDrawerOpen(false);
+      setSnackbarMessage("¡Desafío iniciado!");
+      setSnackbarOpen(true);
+    }
+  };
+
+  const WS_BASE = 'ws://127.0.0.1:8000'; 
+
+  // Construcción de la URL
+  const socketUrl = (authTokens && authTokens.access && lesson) 
+    // NOTA LA BARRA '/' ANTES DEL '?' ¡ES CRÍTICA PARA TU REGEX!
+    ? `${WS_BASE}/ws/chat/lesson/${lessonId}/?token=${authTokens.access}`
+    : null;
+
   const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(
-    `ws://127.0.0.1:8000/ws/chat/lesson/${lessonId}/?token=${authTokens?.access}`,
+    socketUrl,
     {
       onOpen: () => {
-        console.log('Socket está ABIERTO, anunciando presencia...');
-        sendJsonMessage({
-          message_type: 'ANNOUNCE_PRESENCE'
-        });
+        console.log('🟢 [FRONTEND] Conectado al WebSocket');
+        // Opcional: Anunciar presencia si tu Consumer lo espera
+        sendJsonMessage({ message_type: 'ANNOUNCE_PRESENCE' });
       },
-      onClose: (e) => console.log('Socket de Gamificación/Chat cerrado', e.reason),
-      onError: (e) => console.error('Socket de Gamificación/Chat error:', e),
+      onClose: (e) => console.log('🔴 [FRONTEND] Desconectado', e),
       shouldReconnect: (closeEvent) => true,
+      retryOnError: true,
     },
-    !!(authTokens && lesson) // Solo conecta si tenemos token Y lección
+    !!socketUrl // Solo conecta si la URL es válida
   );
   useEffect(() => {
     if (lastJsonMessage !== null) {
@@ -1061,8 +1290,23 @@ function LessonPage() {
       // --- 6. Lógica de "Ranking del Quiz" (Solo Alumno) ---
       else if (lastJsonMessage.type === 'quiz_ranking_update') {
         console.log("Ranking recibido:", lastJsonMessage.data);
+        
+        // Actualizamos SIEMPRE los datos del gráfico/ranking en segundo plano
+        setQuizStats(prev => ({ ...prev, ranking: lastJsonMessage.data.ranking }));
+
         if (user.role !== 'PROFESSOR') {
-          setQuizGameState({ view: 'ranking', data: lastJsonMessage.data });
+          setQuizGameState(prevState => {
+            // [CORRECCIÓN CRÍTICA]
+            // Si el alumno está viendo su resultado ("Correcto" o "Incorrecto"),
+            // IGNORAMOS el cambio de vista automático. 
+            // El alumno irá al ranking manualmente con el botón "Ver Ranking" que agregamos antes.
+            if (prevState.view === 'result_correct' || prevState.view === 'result_incorrect') {
+              return prevState; // No hacemos nada visualmente
+            }
+            
+            // Si estaba esperando (waiting_ia) o ya estaba en el ranking, actualizamos.
+            return { view: 'ranking', data: lastJsonMessage.data };
+          });
         }
       }
 
@@ -1078,8 +1322,24 @@ function LessonPage() {
         console.log("Resultados finales recibidos:", lastJsonMessage.data);
         if (timerRef.current) clearInterval(timerRef.current);
         
+        setQuizStats(lastJsonMessage.data);
+        setGameInProgress(null);
         if (user.role !== 'PROFESSOR') {
-          setQuizGameState({ view: 'final_results', data: lastJsonMessage.data });
+          setQuizGameState(prevState => {
+            
+            // 1. Si el alumno CERRÓ el modal manualmente ('hidden'), 
+            // NO se lo volvemos a abrir. Respetamos su decisión.
+            if (prevState.view === 'hidden') {
+              return prevState; 
+            }
+
+            // 2. En cualquier otro caso (esté viendo ranking, correcto, incorrecto, etc.)
+            // le mostramos el resumen final.
+            return { 
+               view: 'game_over_student', 
+               data: lastJsonMessage.data 
+            };
+          });
         }
       }
       else if (lastJsonMessage.type === 'code_challenge_question') {
@@ -1279,6 +1539,21 @@ function LessonPage() {
         ...getScrollbarStyles(theme)
       }}
     >
+      <ToolsDrawer 
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        theme={theme}
+        user={user}
+        contacts={contacts}
+        connectedIds={connectedUserIds}
+        onGiveXp={handleGiveXp}
+        lessonId={lessonId}
+        liveQuizzes={liveQuizzes}       // Pasamos la lista
+        liveChallenges={liveChallenges} // Pasamos la lista
+        onLaunchQuiz={handleLaunchQuiz} // Pasamos la función
+        onLaunchChallenge={handleLaunchChallenge} // Pasamos la función
+        websocketReadyState={readyState}
+      />
       {/* Título (Item 1) */}
       <motion.div variants={itemVariants}>
         <Typography 
@@ -1635,16 +1910,21 @@ function LessonPage() {
                       {/* Pestaña 1: El Panel de Control */}
                       <TabPanel value={sideTabValue} index={0} theme={theme} enableScroll={false}>
                           <ProfessorPanel 
-                            theme={theme} 
-                            contacts={contacts}
-                            onGiveXp={handleGiveXp}
-                            courseId={courseId}
-                            lessonId={lesson.id}
-                            connectedIds={connectedUserIds}
-                            sendJsonMessage={sendJsonMessage}
-                            websocketReadyState={readyState}
-                            quizStats={quizStats}
-                            isActive={sideTabValue === 0}
+                              theme={theme}
+                              gameInProgress={gameInProgress}
+                              quizStats={quizStats}
+                              // Función para terminar cualquier juego (Quiz o Challenge)
+                              handleEndGameParent={() => {
+                                  if (readyState === ReadyState.OPEN) {
+                                      sendJsonMessage({ message_type: "STOP_GAME" });
+                                      setGameInProgress(null); 
+                            
+                                      setSnackbarMessage("Desafío finalizado correctamente");
+                                      setSnackbarOpen(true);
+                                  }
+                              }}
+                              // Conectamos el botón del panel con el estado del Drawer
+                              onOpenDrawer={() => setDrawerOpen(true)} 
                           />
                       </TabPanel>
 
@@ -2072,7 +2352,38 @@ function LessonPage() {
               </Button>
             </Box>
           )}
+          {quizGameState.view === 'game_over_student' && (
+            <Box>
+              <Typography variant="h4" sx={{ mb: 2 }}>🏁</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 600, mb: 1 }}>
+                Desafío Finalizado
+              </Typography>
+              <Typography color="text.secondary" sx={{ mb: 3 }}>
+                El profesor ha terminado la sesión.
+              </Typography>
+              
+              {/* Muestra el puesto del alumno si está en el ranking */}
+              {(() => {
+                 const myRank = quizGameState.data.ranking.findIndex(p => p.username === user.username);
+                 if (myRank !== -1) {
+                   return (
+                     <Alert severity="success" sx={{ mb: 2 }}>
+                       ¡Quedaste en el puesto #{myRank + 1} con {quizGameState.data.ranking[myRank].score} puntos!
+                     </Alert>
+                   )
+                 }
+                 return <Alert severity="info">¡Buen intento! Sigue practicando.</Alert>
+              })()}
 
+              <Button 
+                variant="contained" 
+                fullWidth 
+                onClick={() => setQuizGameState({ view: 'hidden', data: null })}
+              >
+                Cerrar
+              </Button>
+            </Box>
+          )}
           {/* --- ¡NUEVA VISTA DE ESPERA DE IA! --- */}
           {(quizGameState.view === 'waiting_ia') && (
             <Box>

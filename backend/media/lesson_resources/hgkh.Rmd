@@ -1,0 +1,157 @@
+```{r}
+library(tidyverse)
+iris_pequeño <- iris %>% 
+  select(Sepal.Length,Petal.Length,Species,Sepal.Width) 
+iris_setosa <- iris_pequeño %>%
+  filter(Species == "setosa")
+iris_setosa %>% 
+  rename(Largo_Sepalo = Sepal.Length) %>%
+  mutate(Area_Sepalo = Largo_Sepalo * Sepal.Width)
+
+```
+
+```{r}
+library(tidyverse)
+
+# Paso 1: Seleccionamos Largo, Ancho y Especie. (Añadimos Sepal.Width)
+iris_pequeno <- iris %>% 
+  select(Sepal.Length, Sepal.Width, Petal.Length, Species) 
+
+# Paso 2: Filtramos por 'setosa'
+iris_setosa <- iris_pequeno %>%
+  filter(Species == "setosa")
+
+# Paso 3: Renombrar y Crear la nueva columna
+iris_setosa_final <- iris_setosa %>% 
+  # Sintaxis correcta: nuevo_nombre = viejo_nombre
+  rename(Largo_Sepalo = Sepal.Length) %>% 
+  # Sintaxis correcta: nuevo_nombre = formula
+  mutate(Area_Sepalo = Largo_Sepalo * Sepal.Width)
+
+# Para ver el resultado
+head(iris_setosa_final)
+```
+
+```{r}
+library(tidyverse)
+resumen_iris <- iris %>%
+  group_by(Species) %>%
+  summarise(largo_sepal_promedio = mean(Sepal.Length, na.rm = TRUE),
+            ancho_petal_maximo = max(Petal.Width, na.rm = TRUE))
+
+print(resumen_iris)
+```
+```{r}
+iris_numerico <- iris %>%
+  select(-Species)
+modelo_iris <- kmeans(iris_numerico, centers = 3)
+iris_con_clusters <- iris_numerico %>%
+  mutate(cluster = modelo_iris$cluster)
+ggplot(iris_con_clusters, mapping = aes(x = Petal.Length, y = Petal.Width, color = factor(cluster)))+
+         geom_point()
+         
+```
+
+
+```{r}
+library(tidyverse)
+# library(factoextra) # No necesario para este plot, pero bueno para tenerlo en cuenta
+
+# 1. Preparar los Datos
+iris_numerico <- iris %>%
+  select(-Species)
+
+# 2. Ejecutar K-Means
+modelo_iris <- kmeans(iris_numerico, centers = 3)
+
+# 3. Agregar la columna de clústeres al dataframe para poder graficarla
+# Usamos mutate() para crear una nueva columna llamada 'cluster'
+iris_con_clusters <- iris_numerico %>%
+  mutate(cluster = modelo_iris$cluster)
+
+# 4. Visualizar Resultados
+# Ahora el dataframe 'iris_con_clusters' contiene la columna 'cluster'
+# y podemos usarla dentro de aes()
+ggplot(iris_con_clusters, aes(x = Petal.Length, y = Petal.Width, color = factor(cluster))) +
+  geom_point()
+```
+
+```{r}
+library(tidyverse)
+
+starwars_mod <- starwars %>%
+  mutate(bmi = mass/(height/100)**2,
+         n_films = lengths(films))%>%
+  filter(species == "Human", height > 170) %>%
+  group_by(homeworld)%>%
+  summarise(imc_promedio = mean(bmi, na.rm = TRUE),
+            peliculas_promedio = mean(n_films, na.rm = TRUE))
+print(starwars_mod)
+```
+
+
+```{r}
+
+library(ggplot2) # Siempre cargar la librería primero
+
+# Creamos el lienzo inicial
+ggplot(data = mtcars)
+
+ggplot(data = mtcars, mapping = aes(x = wt, y = mpg))
+
+ggplot(data = mtcars, mapping = aes(x = wt, y = mpg)) +
+  geom_point()
+
+
+grafico_final <- ggplot(data = mtcars, mapping = aes(x = wt, y = mpg)) +
+  geom_point(aes(color = factor(cyl), size = hp), alpha = 0.7)+
+  labs(
+    title = "Relación entre Peso y Rendimiento del Vehículo",
+    subtitle = "Datos del dataset 'mtcars'",
+    x = "Peso del Auto (1000 lbs)",
+    y = "Millas por Galón (MPG)",
+    color = "Nº de Cilindros"
+  ) +
+  facet_wrap(~ cyl) + 
+  theme_minimal()
+
+ggsave("rendimiento_vs_peso.png", plot = grafico_final, width = 10, height = 7, dpi = 300)
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

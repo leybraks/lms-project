@@ -405,10 +405,15 @@ class Resource(models.Model):
     lesson = models.ForeignKey(
         Lesson,
         on_delete=models.CASCADE,
-        related_name='resources' # Permite a Lesson encontrar sus Recursos
+        related_name='resources'
     )
     title = models.CharField(max_length=200)
     file = models.FileField(upload_to='lesson_resources/')
+    
+    # --- AGREGAR ESTOS DOS CAMPOS ---
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    file_size = models.CharField(max_length=50, blank=True, null=True) # Ej: "2.5 MB"
+    # --------------------------------
 
     def __str__(self):
         return f'Recurso "{self.title}" para {self.lesson.title}'
