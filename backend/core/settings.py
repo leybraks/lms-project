@@ -231,4 +231,5 @@ GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 CSRF_TRUSTED_ORIGINS = [
     'https://lms-project-production-39d6.up.railway.app',
     'http://localhost:5173', # (Opcional, para desarrollo)
+    'https://lms-project-two-wheat.vercel.app/login'
 ]
