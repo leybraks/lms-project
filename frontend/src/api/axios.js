@@ -1,35 +1,36 @@
 import axios from 'axios';
 
-// 1. La URL de tu backend
-const API_URL = 'https://lms-project-production-39d6.up.railway.app'; 
+// 1. Detección Inteligente de URL
+// Vite expone las variables de entorno en import.meta.env
+// Si VITE_API_URL existe (Producción), úsala. Si no (Local), usa localhost.
+const baseURL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
-console.log("🔌 Conectando forzosamente a:", API_URL);
-// 2. Creamos una instancia "personalizada" de Axios
+console.log("🌐 Conectando a:", baseURL); // Para depuración
+
 const axiosInstance = axios.create({
-    baseURL: API_URL,
+    baseURL: baseURL,
+    timeout: 10000, // 10 segundos de espera máximo
+    headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+    },
 });
 
-// 3. ¡LA MAGIA! (El Interceptor de Petición)
-// Esto se ejecuta ANTES de que cualquier petición (get, post, put) se envíe.
+// 2. Interceptor (Tu lógica de Tokens estaba perfecta, mantenla)
 axiosInstance.interceptors.request.use(
     (config) => {
-        // No queremos enviar el token al hacer login o registro
-        if (config.url === '/api/auth/login/' || config.url === '/api/auth/registration/') {
+        // Excepciones para endpoints públicos
+        if (config.url.includes('/auth/login/') || config.url.includes('/auth/registration/')) {
             return config;
         }
 
         const token = localStorage.getItem('accessToken');
-        
         if (token) {
             config.headers['Authorization'] = `Bearer ${token}`;
         }
-        
         return config;
     },
-    (error) => {
-        return Promise.reject(error);
-    }
+    (error) => Promise.reject(error)
 );
 
-// 7. Exportamos la instancia para usarla en toda nuestra app
 export default axiosInstance;

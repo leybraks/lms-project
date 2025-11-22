@@ -84,7 +84,6 @@ function LoginPage() {
     }
 
     try {
-      // 2. Preparar los datos (Esto está correcto)
       const userData = {
         username: registerUsername,
         email: registerEmail,
@@ -92,37 +91,35 @@ function LoginPage() {
         password2: registerConfirmPassword
       };
 
-      // 3. Llamar a la API de registro
-      await axiosInstance.post('/api/auth/registration/', userData);
+      // --- CAMBIO CLAVE: URL COMPLETA A RAILWAY ---
+      await axios.post('https://lms-project-production-39d6.up.railway.app/api/auth/registration/', userData);
+      // --------------------------------------------
       
-      // 4. ¡Éxito!
       setRegisterSuccess(true);
       setRegisterError(null);
+      
+      // Limpiar campos
       setRegisterUsername('');
       setRegisterEmail('');
       setRegisterPassword('');
       setRegisterConfirmPassword('');
 
-      // 5. Mover al login automáticamente
+      // Volver al login
       setIsRegistering(false); 
 
     } catch (err) {
-      // 6. ¡MANEJO DE ERRORES CORREGIDO!
-      console.error("Error en el registro:", err.response.data);
-      const data = err.response.data;
+      console.error("Error en el registro:", err);
       
-      if (data.username) {
-        setRegisterError(`Usuario: ${data.username[0]}`);
-      } else if (data.email) {
-        setRegisterError(`Email: ${data.email[0]}`);
-      } else if (data.password1) { // <-- Arreglado
-        setRegisterError(`Contraseña: ${data.password1[0]}`);
-      } else if (data.password2) { // <-- Arreglado
-        setRegisterError(`Repetir Contraseña: ${data.password2[0]}`);
-      } else if (data.password) { // <-- Por si acaso
-        setRegisterError(`Contraseña: ${data.password[0]}`);
+      // Protección contra caídas si el servidor no responde
+      if (err.response && err.response.data) {
+          const data = err.response.data;
+          if (data.username) setRegisterError(`Usuario: ${data.username[0]}`);
+          else if (data.email) setRegisterError(`Email: ${data.email[0]}`);
+          else if (data.password1) setRegisterError(`Contraseña: ${data.password1[0]}`);
+          else if (data.non_field_errors) setRegisterError(data.non_field_errors[0]);
+          else setRegisterError('Error al registrarse. Revisa los datos.');
       } else {
-        setRegisterError('Error al registrarse. Inténtalo de nuevo.');
+          setRegisterError('Error de conexión con el servidor.');
       }
     }
   };
