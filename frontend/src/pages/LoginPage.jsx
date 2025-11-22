@@ -1,4 +1,5 @@
 // frontend/src/pages/LoginPage.jsx
+import axios from 'axios';
 import axiosInstance from '../api/axios';
 import { useNavigate } from 'react-router-dom';
 import React, { useState } from 'react';
@@ -59,11 +60,23 @@ function LoginPage() {
   const handleLoginSubmit = async (event) => {
     event.preventDefault();
     setLoginError(null);
+
     try { 
-      await login({ username: loginUsername, password: loginPassword
+      // 1. LOGIN DIRECTO A RAILWAY (Sin usar axiosInstance ni AuthContext por ahora)
+      const res = await axios.post('https://lms-project-production-39d6.up.railway.app/api/auth/login/', { 
+          username: loginUsername, 
+          password: loginPassword 
       });
+      
+      // 2. Guardar los tokens manualmente en el navegador
+      localStorage.setItem('accessToken', res.data.access);
+      if(res.data.refresh) localStorage.setItem('refreshToken', res.data.refresh);
+      
+      // 3. Redirigir a la fuerza al Dashboard
+      // Usamos window.location para que la página se recargue y el AuthContext lea el token nuevo
+      window.location.href = '/'; 
+
     } catch (err) {
-      // 4. Si falla, mostramos el error
       console.error("Error en el login:", err);
       setLoginError('Usuario o contraseña incorrectos.');
     }
