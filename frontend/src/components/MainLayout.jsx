@@ -151,14 +151,6 @@ function MainLayout() {
                     <ListItemIcon><MenuBookIcon /></ListItemIcon>
                     <ListItemText primary="Cursos" />
                 </ListItemButton>
-                <ListItemButton component={RouterLink} to="/" selected={location.pathname === '/tasks'}>
-                    <ListItemIcon><AssignmentIcon /></ListItemIcon>
-                    <ListItemText primary="Task" />
-                </ListItemButton>
-                <ListItemButton component={RouterLink} to="/groups" selected={location.pathname === '/groups'}>
-                    <ListItemIcon><GroupIcon /></ListItemIcon>
-                    <ListItemText primary="Group" />
-                </ListItemButton>
                 <ListItemButton component={RouterLink} to="/practice">
                   <ListItemIcon><ExtensionIcon /></ListItemIcon>
                   <ListItemText primary="Mundo de Práctica" />
