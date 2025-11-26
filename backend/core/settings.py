@@ -151,7 +151,7 @@ AUTHENTICATION_BACKENDS = [
 SITE_ID = 1
 ACCOUNT_AUTHENTICATION_METHOD = 'username_email' # Permite ambos
 ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_EMAIL_VERIFICATION = 'optional' # Para evitar problemas en la demo
+ACCOUNT_EMAIL_VERIFICATION = 'none' # Para evitar problemas en la demo
 LOGIN_REDIRECT_URL = '/'
 ACCOUNT_LOGOUT_ON_GET = True
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -162,6 +162,7 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 EMAIL_TIMEOUT = 30
+ACCOUNT_CONFIRM_EMAIL_ON_GET = False
 # ==============================================================================
 # 5. CORS (Permitir Frontend)
 # ==============================================================================
