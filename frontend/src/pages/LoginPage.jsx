@@ -121,18 +121,22 @@ function LoginPage() {
       setIsRegistering(false); 
 
     } catch (err) {
-      console.error("Error en el registro:", err);
-      
-      // Protección contra caídas si el servidor no responde
-      if (err.response && err.response.data) {
-          const data = err.response.data;
-          if (data.username) setRegisterError(`Usuario: ${data.username[0]}`);
-          else if (data.email) setRegisterError(`Email: ${data.email[0]}`);
-          else if (data.password1) setRegisterError(`Contraseña: ${data.password1[0]}`);
-          else if (data.non_field_errors) setRegisterError(data.non_field_errors[0]);
-          else setRegisterError('Error al registrarse. Revisa los datos.');
+      console.error("Error detallado:", err);
+      setRegisterSuccess(false); // Aseguramos resetear éxito
+
+      if (err.response) {
+          // Si el servidor respondió (ej: error 500 por correo)
+          if (err.response.status === 500) {
+              setRegisterError("Error del servidor: No se pudo enviar el correo. Intenta de nuevo.");
+          } else if (err.response.data) {
+              // Errores de validación (usuario ya existe, contraseña corta, etc)
+              const data = err.response.data;
+              if (data.username) setRegisterError(data.username[0]);
+              else if (data.email) setRegisterError(data.email[0]);
+              else setRegisterError("Error en los datos de registro.");
+          }
       } else {
-          setRegisterError('Error de conexión con el servidor.');
+          setRegisterError("Error de conexión. Revisa tu internet.");
       }
     }
   };
