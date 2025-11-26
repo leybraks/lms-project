@@ -186,8 +186,9 @@ function InboxPage() {
   const typingTimeoutRef = useRef(null); // <-- ¡NUEVO!
 
   // --- Lógica de WebSocket ---
+  // --- CAMBIO: URL DE PRODUCCIÓN (RAILWAY) ---
   const socketUrl = selectedConvo && authTokens
-    ? `ws://127.0.0.1:8000/ws/chat/conversation/${selectedConvo.id}/?token=${authTokens?.access}`
+    ? `wss://lms-project-production-39d6.up.railway.app/ws/chat/conversation/${selectedConvo.id}/?token=${authTokens?.access}`
     : null;
 
   const { lastJsonMessage, sendJsonMessage } = useWebSocket( // <-- ¡Obtenemos sendJsonMessage!
