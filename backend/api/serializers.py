@@ -225,25 +225,23 @@ class ModuleSerializer(serializers.ModelSerializer):
 
 # 4. Serializer de Curso (Para la lista)
 class CourseSerializer(serializers.ModelSerializer):
-    """
-    Serializer enriquecido para las tarjetas del catálogo de cursos.
-    """
-    # Anidamos el serializer del profesor para obtener su nombre
-    professor = UserSerializer(read_only=True)
-    
-    # Este campo se llenará usando 'annotate' en la vista
+    # --- ESTAS SON LAS LÍNEAS QUE FALTAN O ESTÁN MAL UBICADAS ---
+    enrollments_count = serializers.IntegerField(read_only=True)
     modules_count = serializers.IntegerField(read_only=True)
+    # ------------------------------------------------------------
+
+    # (Opcional) Si quieres el nombre del profesor en la lista
+    professor = UserSerializer(read_only=True) 
 
     class Meta:
         model = Course
-        # ¡Enviamos todos los campos nuevos que creamos en models.py!
         fields = [
             'id', 'title', 'description', 'main_image_url', 
             'estimated_duration', 'is_published', 'created_at',
-            'enrollments_count', 'modules_count', # <-- ¡IMPORTANTE!
-            'professor'
+            'professor',
+            'enrollments_count', # <--- Ahora sí funcionará porque está definido arriba
+            'modules_count'      # <--- Ahora sí funcionará porque está definido arriba
         ]
-
 # 5. Serializer de Detalle de Curso (Anida Módulos)
 class CourseDetailSerializer(serializers.ModelSerializer):
     # Conecta con la cadena de arriba
