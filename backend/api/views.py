@@ -340,36 +340,59 @@ class QuizDetailView(generics.RetrieveAPIView):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_dashboard_stats(request):
-    """
-    Devuelve un resumen de las estadísticas del usuario logueado
-    para el Dashboard del Frontend.
-    """
     user = request.user
     
-    # 1. Contar Cursos Inscritos
-    enrolled_courses_count = Enrollment.objects.filter(user=user).count()
-    
-    # 2. Contar Lecciones Completadas
-    lessons_completed_count = LessonCompletion.objects.filter(user=user).count()
-    
-    # 3. Contar Tareas Entregadas (Status SUBMITTED o GRADED)
-    submissions_count = Submission.objects.filter(
-        user=user, 
-        status__in=['SUBMITTED', 'GRADED']
-    ).count()
+    if user.role == 'PROFESSOR':
+        # --- LÓGICA REAL PARA PROFESOR ---
+        # 1. Cursos creados por mí
+        my_courses_count = Course.objects.filter(professor=user).count()
+        
+        # 2. Total de estudiantes únicos en mis cursos
+        total_students = Enrollment.objects.filter(
+            course__professor=user
+        ).values('user').distinct().count()
+        
+        # 3. Tareas pendientes de calificar (Status = SUBMITTED)
+        pending_grading = Submission.objects.filter(
+            assignment__lesson__module__course__professor=user,
+            status='SUBMITTED'
+        ).count()
+        
+        return Response({
+            'role': 'PROFESSOR',
+            'courses_created': my_courses_count,
+            'total_students': total_students,
+            'pending_tasks': pending_grading
+        })
 
-    # (En el futuro, aquí podríamos añadir las insignias)
-    
-    # Prepara la respuesta JSON
-    data = {
-        'enrolled_courses': enrolled_courses_count,
-        'lessons_completed': lessons_completed_count,
-        'assignments_submitted': submissions_count,
-        # 'badges_unlocked': 0 # (Para el futuro)
-    }
-    
-    return Response(data, status=status.HTTP_200_OK)
-# ====================================================================
+    else:
+        # --- LÓGICA REAL PARA ESTUDIANTE (Ya la tenías) ---
+        enrolled_count = Enrollment.objects.filter(user=user).count()
+        completed_count = LessonCompletion.objects.filter(user=user).count()
+        submitted_count = Submission.objects.filter(user=user).count()
+        
+        return Response({
+            'role': 'STUDENT',
+            'enrolled_courses': enrolled_count,
+            'lessons_completed': completed_count,
+            'assignments_submitted': submitted_count,
+            # Calculamos XP y Nivel para la mascota
+            'total_xp': user.experience_points
+        })
+
+# 2. AGREGA ESTA NUEVA VISTA (Para el Feed de Actividad)
+class ProfessorActivityFeedView(generics.ListAPIView):
+    """
+    Devuelve las últimas 5 entregas de tareas de los alumnos del profesor.
+    """
+    serializer_class = SubmissionSerializer # Reutilizamos este serializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Solo submissions de cursos donde soy el profesor
+        return Submission.objects.filter(
+            assignment__lesson__module__course__professor=self.request.user
+        ).order_by('-submitted_at')[:5] # Las 5 más recientes
 # NUEVA VISTA: Lecciones Próximas para el Dashboard
 # ====================================================================
 class UpcomingLessonsView(generics.ListAPIView):
