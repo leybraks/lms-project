@@ -123,6 +123,7 @@ const CourseCard = ({ course, isProfessor, navigate }) => (
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
 const itemVariants = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } };
 // === COMPONENTE CARRUSEL PARA SIDEBAR ===
+// === COMPONENTE CARRUSEL PARA SIDEBAR (FLECHAS DENTRO) ===
 const SidebarCarousel = ({ children }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -142,45 +143,73 @@ const SidebarCarousel = ({ children }) => {
     setCurrentIndex((prev) => (prev === 0 ? children.length - 1 : prev - 1));
   };
 
+  // Estilo común para los botones flotantes de navegación
+  const navButtonStyle = {
+      position: 'absolute', // Fundamental para que floten
+      top: '50%',           // Centrado vertical
+      transform: 'translateY(-50%)', // Ajuste fino del centrado
+      zIndex: 10,           // Asegura que estén ENCIMA del contenido
+      
+      // Estilizado visual
+      bgcolor: 'rgba(0,0,0,0.4)', // Fondo oscuro semitransparente
+      color: 'white',
+      backdropFilter: 'blur(4px)', // Un toque moderno de desenfoque
+      width: 36, height: 36, // Tamaño fijo pequeño
+      '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' }, // Más oscuro al pasar el mouse
+      boxShadow: 3
+  };
+
   return (
-    <Box sx={{ position: 'relative', width: '100%' }}>
-      {/* Contenedor del contenido con altura mínima para evitar saltos bruscos */}
-      <Box sx={{ minHeight: 300 }}> 
+    <Box sx={{ position: 'relative', width: '100%', pb: 3 }}> {/* pb:3 da espacio abajo para los puntitos */}
+      
+      {/* --- CONTENIDO DEL SLIDE --- */}
+      {/* Quitamos el minHeight para que se ajuste al contenido real */}
+      <Box sx={{ overflow: 'hidden', borderRadius: 4, position: 'relative' }}> 
         <motion.div
           key={currentIndex}
-          initial={{ opacity: 0, x: 50 }}
+          initial={{ opacity: 0, x: 100 }} // Animación más suave entrando de lado
           animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -50 }}
-          transition={{ duration: 0.3 }}
+          exit={{ opacity: 0, x: -100 }}
+          transition={{ duration: 0.4, ease: "easeInOut" }}
         >
           {children[currentIndex]}
         </motion.div>
       </Box>
 
-      {/* Controles de navegación (Flechas y Puntos) */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2, px: 1 }}>
-        <IconButton onClick={prevSlide} size="small" sx={{ bgcolor: 'rgba(255,255,255,0.05)', '&:hover':{bgcolor:'rgba(255,255,255,0.1)'} }}>
-          <ArrowBackIosNewIcon fontSize="small" />
-        </IconButton>
-        
-        {/* Indicadores (puntitos) */}
-        <Box sx={{ display: 'flex', gap: 1 }}>
+      {/* --- FLECHA IZQUIERDA (Flotante) --- */}
+      <IconButton 
+          onClick={prevSlide} 
+          size="small" 
+          sx={{ ...navButtonStyle, left: 8 }} // Pegado a la izquierda con un pequeño margen
+      >
+          <ArrowBackIosNewIcon fontSize="small" sx={{ fontSize: '1rem' }} />
+      </IconButton>
+      
+      {/* --- FLECHA DERECHA (Flotante) --- */}
+      <IconButton 
+          onClick={nextSlide} 
+          size="small" 
+          sx={{ ...navButtonStyle, right: 8 }} // Pegado a la derecha con un pequeño margen
+      >
+          <ArrowForwardIosIcon fontSize="small" sx={{ fontSize: '1rem' }}/>
+      </IconButton>
+
+
+      {/* --- INDICADORES (PUNTITOS) --- */}
+      {/* Los dejamos abajo centrados */}
+      <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, position: 'absolute', bottom: 0, width: '100%', left: 0 }}>
             {children.map((_, index) => (
                 <FiberManualRecordIcon 
                     key={index} 
                     sx={{ 
                         fontSize: 10, 
                         cursor: 'pointer',
-                        color: index === currentIndex ? 'primary.main' : 'text.disabled' 
+                        color: index === currentIndex ? 'primary.main' : 'rgba(255,255,255,0.2)',
+                        transition: '0.3s'
                     }}
                     onClick={() => setCurrentIndex(index)}
                 />
             ))}
-        </Box>
-
-        <IconButton onClick={nextSlide} size="small" sx={{ bgcolor: 'rgba(255,255,255,0.05)', '&:hover':{bgcolor:'rgba(255,255,255,0.1)'} }}>
-          <ArrowForwardIosIcon fontSize="small" />
-        </IconButton>
       </Box>
     </Box>
   );
