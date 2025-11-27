@@ -4,7 +4,9 @@ import axiosInstance from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '@mui/material/styles'; 
 import { motion } from "framer-motion";
-
+import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
+import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
+import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import {
   Box, Typography, Paper, Button, Avatar, CircularProgress, List, ListItem, 
   ListItemAvatar, ListItemText, IconButton, Card, CardContent, 
@@ -120,7 +122,69 @@ const CourseCard = ({ course, isProfessor, navigate }) => (
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
 const itemVariants = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } };
+// === COMPONENTE CARRUSEL PARA SIDEBAR ===
+const SidebarCarousel = ({ children }) => {
+  const [currentIndex, setCurrentIndex] = useState(0);
 
+  // Auto-play (Opcional: cambia cada 6 segundos)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      nextSlide();
+    }, 6000); 
+    return () => clearInterval(timer);
+  }, [currentIndex]);
+
+  const nextSlide = () => {
+    setCurrentIndex((prev) => (prev + 1) % children.length);
+  };
+
+  const prevSlide = () => {
+    setCurrentIndex((prev) => (prev === 0 ? children.length - 1 : prev - 1));
+  };
+
+  return (
+    <Box sx={{ position: 'relative', width: '100%' }}>
+      {/* Contenedor del contenido con altura mínima para evitar saltos bruscos */}
+      <Box sx={{ minHeight: 300 }}> 
+        <motion.div
+          key={currentIndex}
+          initial={{ opacity: 0, x: 50 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -50 }}
+          transition={{ duration: 0.3 }}
+        >
+          {children[currentIndex]}
+        </motion.div>
+      </Box>
+
+      {/* Controles de navegación (Flechas y Puntos) */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2, px: 1 }}>
+        <IconButton onClick={prevSlide} size="small" sx={{ bgcolor: 'rgba(255,255,255,0.05)', '&:hover':{bgcolor:'rgba(255,255,255,0.1)'} }}>
+          <ArrowBackIosNewIcon fontSize="small" />
+        </IconButton>
+        
+        {/* Indicadores (puntitos) */}
+        <Box sx={{ display: 'flex', gap: 1 }}>
+            {children.map((_, index) => (
+                <FiberManualRecordIcon 
+                    key={index} 
+                    sx={{ 
+                        fontSize: 10, 
+                        cursor: 'pointer',
+                        color: index === currentIndex ? 'primary.main' : 'text.disabled' 
+                    }}
+                    onClick={() => setCurrentIndex(index)}
+                />
+            ))}
+        </Box>
+
+        <IconButton onClick={nextSlide} size="small" sx={{ bgcolor: 'rgba(255,255,255,0.05)', '&:hover':{bgcolor:'rgba(255,255,255,0.1)'} }}>
+          <ArrowForwardIosIcon fontSize="small" />
+        </IconButton>
+      </Box>
+    </Box>
+  );
+};
 // === COMPONENTE PRINCIPAL ===
 function HomePage() {
   const { user } = useAuth();
@@ -297,99 +361,103 @@ function HomePage() {
             {/* === COLUMNA DERECHA (SIDEBAR FIJO) === */}
             {/* Simplemente aplicamos sticky aquí directamente */}
             <Box sx={{ 
-                position: { lg: 'sticky' }, 
-                top: { lg: 24 },
-                height: 'fit-content' // Importante para que sticky funcione
+              position: { lg: 'sticky' }, 
+              top: { lg: 24 },
+              height: 'fit-content'
             }}>
-                
-                {/* 1. WIDGET DE CALENDARIO */}
-                <Paper sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', mb: 3, border: '1px solid rgba(255,255,255,0.1)' }}>
-                    <Typography variant="h6" fontWeight="700" mb={2} sx={{display:'flex', alignItems:'center', gap:1}}>
-                        <CalendarMonthIcon color="primary"/> Agenda
-                    </Typography>
-                    <List dense>
-                        <ListItem>
-                            <ListItemAvatar>
-                                <Avatar sx={{ bgcolor: 'primary.light', color: 'primary.main', fontSize: '0.8rem', fontWeight: 'bold' }}>27</Avatar>
-                            </ListItemAvatar>
-                            <ListItemText primary="Entrega Proyecto Final" secondary="Curso Python • 23:59" />
-                        </ListItem>
-                        <Divider variant="inset" component="li" />
-                        <ListItem>
-                            <ListItemAvatar>
-                                <Avatar sx={{ bgcolor: 'secondary.light', color: 'secondary.main', fontSize: '0.8rem', fontWeight: 'bold' }}>30</Avatar>
-                            </ListItemAvatar>
-                            <ListItemText primary="Revisión de Notas" secondary="General • 10:00 AM" />
-                        </ListItem>
-                    </List>
-                </Paper>
+              
+              {/* 1. AGENDA (SE QUEDA FIJA FUERA DEL CARRUSEL) */}
+              <Paper sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', mb: 3, border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <Typography variant="h6" fontWeight="700" mb={2} sx={{display:'flex', alignItems:'center', gap:1}}>
+                      <CalendarMonthIcon color="primary"/> Agenda
+                  </Typography>
+                  <List dense>
+                      <ListItem>
+                          <ListItemAvatar>
+                              <Avatar sx={{ bgcolor: 'primary.light', color: 'primary.main', fontSize: '0.8rem', fontWeight: 'bold' }}>27</Avatar>
+                          </ListItemAvatar>
+                          <ListItemText primary="Entrega Proyecto Final" secondary="Curso Python • 23:59" />
+                      </ListItem>
+                      <Divider variant="inset" component="li" />
+                      <ListItem>
+                          <ListItemAvatar>
+                              <Avatar sx={{ bgcolor: 'secondary.light', color: 'secondary.main', fontSize: '0.8rem', fontWeight: 'bold' }}>30</Avatar>
+                          </ListItemAvatar>
+                          <ListItemText primary="Revisión de Notas" secondary="General • 10:00 AM" />
+                      </ListItem>
+                  </List>
+              </Paper>
 
-                {/* 2. TOP ESTUDIANTES */}
-                <Paper sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', mb: 3, border: '1px solid rgba(255,255,255,0.1)' }}>
-                    <Typography variant="h6" fontWeight="700" mb={2} sx={{display:'flex', alignItems:'center', gap:1}}>
-                        <EmojiEventsIcon color="warning"/> Top Estudiantes
-                    </Typography>
-                    <List>
-                        <ListItem>
-                            <ListItemAvatar><Avatar src="https://i.pravatar.cc/150?img=1" /></ListItemAvatar>
-                            <ListItemText primary="Maria Lopez" secondary="1500 XP • Nivel 12" />
-                            <Chip size="small" label="#1" color="warning" />
-                        </ListItem>
-                        <ListItem>
-                            <ListItemAvatar><Avatar src="https://i.pravatar.cc/150?img=2" /></ListItemAvatar>
-                            <ListItemText primary="Carlos Diaz" secondary="1420 XP • Nivel 11" />
-                            <Chip size="small" label="#2" color="default" />
-                        </ListItem>
-                    </List>
-                </Paper>
+              {/* === CARRUSEL DE WIDGETS === */}
+              {/* Aquí metemos los otros 3 componentes como hijos */}
+              <SidebarCarousel>
+                  
+                  {/* SLIDE 1: TOP ESTUDIANTES */}
+                  <Paper sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', border: '1px solid rgba(255,255,255,0.1)', height: '100%' }}>
+                      <Typography variant="h6" fontWeight="700" mb={2} sx={{display:'flex', alignItems:'center', gap:1}}>
+                          <EmojiEventsIcon color="warning"/> Top Estudiantes
+                      </Typography>
+                      <List>
+                          <ListItem>
+                              <ListItemAvatar><Avatar src="https://i.pravatar.cc/150?img=1" /></ListItemAvatar>
+                              <ListItemText primary="Maria Lopez" secondary="1500 XP • Nivel 12" />
+                              <Chip size="small" label="#1" color="warning" />
+                          </ListItem>
+                          <ListItem>
+                              <ListItemAvatar><Avatar src="https://i.pravatar.cc/150?img=2" /></ListItemAvatar>
+                              <ListItemText primary="Carlos Diaz" secondary="1420 XP • Nivel 11" />
+                              <Chip size="small" label="#2" color="default" />
+                          </ListItem>
+                      </List>
+                  </Paper>
 
-                {/* 3. ACTIVIDAD RECIENTE */}
-                <Paper sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', mb: 3 }}>
-                    <Typography variant="h6" fontWeight="700" mb={2} sx={{display:'flex', alignItems:'center', gap:1}}>
-                        <NotificationsActiveIcon color="action"/> Últimas Entregas
-                    </Typography>
-                    
-                    {activityFeed.length > 0 ? (
-                        <List>
-                            {activityFeed.map((sub) => (
-                                <React.Fragment key={sub.id}>
-                                    <ListItem alignItems="flex-start" sx={{ px: 0 }}>
-                                        <ListItemAvatar>
-                                            <Avatar sx={{ bgcolor: 'secondary.main', width: 36, height: 36, fontSize: '0.9rem' }}>
-                                                {sub.user_username ? sub.user_username[0].toUpperCase() : '?'}
-                                            </Avatar>
-                                        </ListItemAvatar>
-                                        <ListItemText 
-                                            primary={<Typography variant="subtitle2" fontWeight="bold">{sub.user_username}</Typography>}
-                                            secondary={`${sub.assignment_title || "Tarea"} • ${new Date(sub.submitted_at).toLocaleDateString()}`}
-                                        />
-                                    </ListItem>
-                                    <Divider variant="inset" component="li" />
-                                </React.Fragment>
-                            ))}
-                        </List>
-                    ) : (
-                        <Box sx={{ textAlign: 'center', py: 3, opacity: 0.5 }}>
-                            <NotificationsActiveIcon sx={{ fontSize: 40, mb: 1 }} />
-                            <Typography variant="caption" display="block">No hay actividad reciente.</Typography>
-                        </Box>
-                    )}
-                </Paper>
+                  {/* SLIDE 2: ACTIVIDAD RECIENTE */}
+                  <Paper sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', border: '1px solid rgba(255,255,255,0.1)', height: '100%' }}>
+                      <Typography variant="h6" fontWeight="700" mb={2} sx={{display:'flex', alignItems:'center', gap:1}}>
+                          <NotificationsActiveIcon color="action"/> Últimas Entregas
+                      </Typography>
+                      {activityFeed.length > 0 ? (
+                          <List>
+                              {activityFeed.slice(0, 2).map((sub) => ( // Mostramos solo 2 para que quepan bien
+                                  <React.Fragment key={sub.id}>
+                                      <ListItem alignItems="flex-start" sx={{ px: 0 }}>
+                                          <ListItemAvatar>
+                                              <Avatar sx={{ bgcolor: 'secondary.main', width: 36, height: 36, fontSize: '0.9rem' }}>
+                                                  {sub.user_username ? sub.user_username[0].toUpperCase() : '?'}
+                                              </Avatar>
+                                          </ListItemAvatar>
+                                          <ListItemText 
+                                              primary={<Typography variant="subtitle2" fontWeight="bold">{sub.user_username}</Typography>}
+                                              secondary={`${sub.assignment_title || "Tarea"} • ${new Date(sub.submitted_at).toLocaleDateString()}`}
+                                          />
+                                      </ListItem>
+                                  </React.Fragment>
+                              ))}
+                          </List>
+                      ) : (
+                          <Box sx={{ textAlign: 'center', py: 3, opacity: 0.5 }}>
+                              <NotificationsActiveIcon sx={{ fontSize: 40, mb: 1 }} />
+                              <Typography variant="caption" display="block">No hay actividad reciente.</Typography>
+                          </Box>
+                      )}
+                  </Paper>
 
-                {/* 4. TIP */}
-                <Paper sx={{ p: 3, borderRadius: 4, background: 'linear-gradient(135deg, #1a237e 0%, #283593 100%)', color: 'white' }}>
-                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'start' }}>
-                        <HelpOutlineIcon />
-                        <Box>
-                            <Typography variant="subtitle1" fontWeight="bold" gutterBottom>¿Sabías qué?</Typography>
-                            <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                                Puedes usar la IA para generar desafíos de código automáticamente en tus lecciones.
-                            </Typography>
-                        </Box>
-                    </Box>
-                </Paper>
+                  {/* SLIDE 3: TIP / SABIAS QUE */}
+                  <Paper sx={{ p: 3, borderRadius: 4, background: 'linear-gradient(135deg, #1a237e 0%, #283593 100%)', color: 'white', height: '100%', display:'flex', alignItems:'center' }}>
+                      <Box sx={{ display: 'flex', gap: 2, alignItems: 'start' }}>
+                          <HelpOutlineIcon fontSize="large"/>
+                          <Box>
+                              <Typography variant="subtitle1" fontWeight="bold" gutterBottom>¿Sabías qué?</Typography>
+                              <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                                  Puedes usar la IA para generar desafíos de código automáticamente en tus lecciones. ¡Inténtalo en el editor!
+                              </Typography>
+                          </Box>
+                      </Box>
+                  </Paper>
 
-            </Box> {/* Fin Columna Derecha */}
+              </SidebarCarousel>
+
+          </Box> {/* Fin Columna Derecha */}
 
         </Box> 
 
