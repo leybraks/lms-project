@@ -266,7 +266,7 @@ function HomePage() {
                         <SchoolIcon color="primary"/> {isProfessor ? "Tus Cursos" : "Continuar Aprendiendo"}
                     </Typography>
                     
-                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 3 }}>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 3 }}>
                         {courses.length > 0 ? (
                             courses.map(course => (
                                 <motion.div key={course.id} variants={itemVariants}>
