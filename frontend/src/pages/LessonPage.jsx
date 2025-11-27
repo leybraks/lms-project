@@ -1189,7 +1189,7 @@ function LessonPage() {
     }
   };
 
-  const WS_BASE = 'ws://127.0.0.1:8000'; 
+  const WS_BASE = 'wss://lms-project-production-39d6.up.railway.app';
 
   // Construcción de la URL
   const socketUrl = (authTokens && authTokens.access && lesson) 
