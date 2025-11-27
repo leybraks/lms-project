@@ -133,6 +133,7 @@ function HomePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // ... (Tu lógica de fetch sigue igual) ...
     const fetchData = async () => {
       if (!user) return;
       try {
@@ -165,14 +166,16 @@ function HomePage() {
       variants={containerVariants} 
       initial="hidden" 
       animate="visible"
-      sx={{ width: '100%', height: '100%', overflowY: 'auto', bgcolor: 'background.default' }}
+      sx={{ width: '100%', height: '100%', overflowY: 'auto', bgcolor: 'background.default', overflowX: 'hidden' }}
     >
-      {/* 1. HERO BANNER CON GRADIENTE */}
+      {/* 1. HERO BANNER (FULL WIDTH) */}
       <Box sx={{ 
           background: `linear-gradient(120deg, ${theme.palette.primary.dark}, ${theme.palette.primary.main})`, 
-          color: 'white', pt: 6, pb: 12, px: 4, mb: -8
+          color: 'white', pt: 6, pb: 12, 
+          px: { xs: 3, md: 5 }, // Padding lateral consistente
+          mb: -8
       }}>
-          <Box sx={{ maxWidth: 1600, mx: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+          <Box sx={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
             <Box>
                 <Typography variant="h3" fontWeight="800" sx={{ mb: 1 }}>
                     Hola, {user.username} 👋
@@ -181,48 +184,50 @@ function HomePage() {
                     Bienvenido a tu centro de comando docente.
                 </Typography>
             </Box>
-            <Button 
-                variant="contained" 
-                size="large"
-                startIcon={<AddIcon />} 
-                sx={{ bgcolor: 'white', color: 'primary.main', fontWeight: 'bold', boxShadow: 3, '&:hover':{bgcolor:'#f0f0f0'} }}
-            >
-                Crear Nuevo Curso
-            </Button>
+            {isProfessor && (
+                <Button 
+                    variant="contained" 
+                    size="large"
+                    startIcon={<AddIcon />} 
+                    sx={{ bgcolor: 'white', color: 'primary.main', fontWeight: 'bold', boxShadow: 3, '&:hover':{bgcolor:'#f0f0f0'} }}
+                    onClick={() => alert("Crear Curso Pendiente")}
+                >
+                    Crear Nuevo Curso
+                </Button>
+            )}
           </Box>
       </Box>
 
-      {/* CONTENEDOR PRINCIPAL */}
-      <Box sx={{ maxWidth: 1600, mx: 'auto', px: 4, pb: 8 }}>
+      {/* 2. CONTENEDOR PRINCIPAL (FULL WIDTH) */}
+      <Box sx={{ width: '100%', px: { xs: 3, md: 5 }, pb: 8 }}>
         
-        {/* 2. ESTADÍSTICAS (4 Tarjetas para llenar el ancho) */}
+        {/* ESTADÍSTICAS */}
         {stats && (
-            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 3, mb: 5 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 3, mb: 5 }}>
                 <motion.div variants={itemVariants}>
                     <StatCard 
-                        title="Total Estudiantes" 
-                        value={stats.total_students} 
-                        icon={<PeopleIcon />} 
+                        title={isProfessor ? "Total Estudiantes" : "Cursos Inscritos"} 
+                        value={isProfessor ? stats.total_students : stats.enrolled_courses} 
+                        icon={isProfessor ? <PeopleIcon /> : <LibraryBooksIcon />} 
                         color="primary" 
                     />
                 </motion.div>
                 <motion.div variants={itemVariants}>
                     <StatCard 
-                        title="Cursos Activos" 
-                        value={stats.courses_created} 
-                        icon={<SchoolIcon />} 
+                        title={isProfessor ? "Cursos Activos" : "Lecciones Listas"} 
+                        value={isProfessor ? stats.courses_created : stats.lessons_completed} 
+                        icon={isProfessor ? <SchoolIcon /> : <CheckCircleOutlineIcon />} 
                         color="success" 
                     />
                 </motion.div>
                 <motion.div variants={itemVariants}>
                     <StatCard 
-                        title="Tareas Pendientes" 
-                        value={stats.pending_tasks} 
+                        title={isProfessor ? "Tareas Pendientes" : "Tareas Enviadas"} 
+                        value={isProfessor ? stats.pending_tasks : stats.assignments_submitted} 
                         icon={<AssignmentTurnedInIcon />} 
                         color="warning" 
                     />
                 </motion.div>
-                {/* TARJETA NUEVA DE RELLENO */}
                 <motion.div variants={itemVariants}>
                     <StatCard 
                         title="Valoración Promedio" 
@@ -242,7 +247,7 @@ function HomePage() {
                 {/* Sección de Cursos */}
                 <Box sx={{ mb: 6 }}>
                     <Typography variant="h5" fontWeight="800" sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <SchoolIcon color="primary"/> Tus Cursos
+                        <SchoolIcon color="primary"/> {isProfessor ? "Tus Cursos" : "Continuar Aprendiendo"}
                     </Typography>
                     
                     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 3 }}>
@@ -262,27 +267,9 @@ function HomePage() {
                 <Box>
                     <Typography variant="h6" fontWeight="700" sx={{ mb: 3, opacity: 0.7 }}>ACCIONES RÁPIDAS</Typography>
                     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 2 }}>
-                        <QuickActionCard 
-                            icon={<BoltIcon />} 
-                            title="Crear Quiz" 
-                            description="Lanzar evaluación en vivo"
-                            color="warning" 
-                            onClick={() => {}} 
-                        />
-                        <QuickActionCard 
-                            icon={<NotificationsActiveIcon />} 
-                            title="Anuncio" 
-                            description="Notificar a todos"
-                            color="info" 
-                            onClick={() => {}} 
-                        />
-                        <QuickActionCard 
-                            icon={<SettingsIcon />} 
-                            title="Configuración" 
-                            description="Ajustes de la cuenta"
-                            color="grey" 
-                            onClick={() => {}} 
-                        />
+                        <QuickActionCard icon={<BoltIcon />} title="Crear Quiz Rápido" description="Lanzar evaluación" color="warning" onClick={() => {}} />
+                        <QuickActionCard icon={<NotificationsActiveIcon />} title="Anuncio" description="Notificar a todos" color="info" onClick={() => {}} />
+                        <QuickActionCard icon={<SettingsIcon />} title="Configuración" description="Ajustes de la cuenta" color="grey" onClick={() => {}} />
                     </Box>
                 </Box>
 
@@ -291,7 +278,7 @@ function HomePage() {
             {/* COLUMNA DERECHA (SIDEBAR) - 4/12 */}
             <Grid item xs={12} lg={4}>
                 
-                {/* 1. WIDGET DE CALENDARIO / PRÓXIMOS EVENTOS */}
+                {/* 1. WIDGET DE CALENDARIO */}
                 <Paper sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', mb: 3, border: '1px solid rgba(255,255,255,0.1)' }}>
                     <Typography variant="h6" fontWeight="700" mb={2} sx={{display:'flex', alignItems:'center', gap:1}}>
                         <CalendarMonthIcon color="primary"/> Agenda
@@ -313,7 +300,7 @@ function HomePage() {
                     </List>
                 </Paper>
 
-                {/* 2. TOP ESTUDIANTES (GAMIFICACIÓN) */}
+                {/* 2. TOP ESTUDIANTES */}
                 <Paper sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', mb: 3, border: '1px solid rgba(255,255,255,0.1)' }}>
                     <Typography variant="h6" fontWeight="700" mb={2} sx={{display:'flex', alignItems:'center', gap:1}}>
                         <EmojiEventsIcon color="warning"/> Top Estudiantes
@@ -365,7 +352,7 @@ function HomePage() {
                     )}
                 </Paper>
 
-                {/* 4. TIP (RELLENO FINAL) */}
+                {/* 4. TIP */}
                 <Paper sx={{ p: 3, borderRadius: 4, background: 'linear-gradient(135deg, #1a237e 0%, #283593 100%)', color: 'white' }}>
                     <Box sx={{ display: 'flex', gap: 2, alignItems: 'start' }}>
                         <HelpOutlineIcon />
