@@ -91,7 +91,11 @@ const CourseCard = ({ course, isProfessor, navigate }) => (
   >
     <Box sx={{ position: 'relative', height: 120, background: 'linear-gradient(135deg, #1e1e1e 0%, #2c2c2c 100%)', p: 3 }}>
         <Box sx={{ display:'flex', justifyContent:'space-between'}}>
-            <Chip label={(course.modules?.length || 0) + " Módulos"} size="small" sx={{ bgcolor:'rgba(0,0,0,0.4)', color:'white', backdropFilter:'blur(4px)' }} />
+            <Chip 
+                label={`${course.modules_count || 0} Módulos`} 
+                size="small" 
+                sx={{ bgcolor:'rgba(0,0,0,0.4)', color:'white', backdropFilter:'blur(4px)' }} 
+            />
             <Chip label={isProfessor ? "Activo" : "En curso"} color={isProfessor ? "success" : "primary"} size="small" />
         </Box>
         <Typography variant="h5" fontWeight="bold" noWrap sx={{color:'white', mt: 2}}>

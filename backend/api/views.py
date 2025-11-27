@@ -45,6 +45,13 @@ class CourseViewSet(viewsets.ModelViewSet):
         if self.action == 'retrieve':
             return CourseDetailSerializer
         return CourseSerializer
+    def get_queryset(self):
+        # --- ¡LA MAGIA ESTÁ AQUÍ! ---
+        # Usamos .annotate() para contar módulos y estudiantes eficientemente
+        return Course.objects.all().annotate(
+            modules_count=Count('modules', distinct=True),
+            enrollments_count=Count('enrollments', distinct=True)
+        ).order_by('-created_at')
     
 class ListaDeCursosView(generics.ListAPIView):
     """

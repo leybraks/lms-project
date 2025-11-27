@@ -238,12 +238,10 @@ class CourseSerializer(serializers.ModelSerializer):
         model = Course
         # ¡Enviamos todos los campos nuevos que creamos en models.py!
         fields = [
-            'id', 
-            'title', 
-            'description', 
-            'main_image_url',   # <-- La imagen del curso
-            'professor',          # <-- El objeto del profesor
-            'modules_count'       # <-- El conteo de módulos
+            'id', 'title', 'description', 'main_image_url', 
+            'estimated_duration', 'is_published', 'created_at',
+            'enrollments_count', 'modules_count', # <-- ¡IMPORTANTE!
+            'professor'
         ]
 
 # 5. Serializer de Detalle de Curso (Anida Módulos)
