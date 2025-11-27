@@ -255,7 +255,8 @@ function HomePage() {
         }}>
             
             {/* === COLUMNA IZQUIERDA (Principal) === */}
-            <Box sx={{ minWidth: 0 }}> {/* minWidth 0 evita que el grid explote con contenido largo */}
+            <Box sx={{ width: { xs: '100%', md: 'calc(70% - 12px)' }, // Restamos mitad del gap
+    flexBasis: { xs: '100%', md: 'calc(70% - 12px)' }, }}> {/* minWidth 0 evita que el grid explote con contenido largo */}
                 
                 {/* Sección de Cursos */}
                 <Box sx={{ mb: 6 }}>
@@ -263,7 +264,7 @@ function HomePage() {
                         <SchoolIcon color="primary"/> {isProfessor ? "Tus Cursos" : "Continuar Aprendiendo"}
                     </Typography>
                     
-                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 3 }}>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 3 }}>
                         {courses.length > 0 ? (
                             courses.map(course => (
                                 <motion.div key={course.id} variants={itemVariants}>
@@ -293,7 +294,10 @@ function HomePage() {
 
             {/* === COLUMNA DERECHA (SIDEBAR FIJO) === */}
             <Box>
-                <Box sx={{ position: 'sticky', top: 24 }}>
+                <Box sx={{ position: 'sticky', top: 24,
+                  width: { xs: '100%', md: 'calc(30% - 12px)' }, // Restamos mitad del gap
+    flexBasis: { xs: '100%', md: 'calc(30% - 12px)' },
+                 }}>
                     
                     {/* 1. WIDGET DE CALENDARIO */}
                     <Paper sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', mb: 3, border: '1px solid rgba(255,255,255,0.1)' }}>
