@@ -1,17 +1,19 @@
+
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import axiosInstance from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '@mui/material/styles'; 
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
+
 import {
   Box, Typography, Paper, Button, Avatar, CircularProgress, List, ListItem, 
   ListItemAvatar, ListItemText, IconButton, Card, CardContent, 
-  LinearProgress, Chip, Divider, Alert, Rating
-} from '@mui/material'; // <--- YA NO IMPORTAMOS GRID AQUÍ PARA EL LAYOUT PRINCIPAL
+  LinearProgress, Chip, Divider, Alert, Rating, Modal, TextField, Snackbar
+} from '@mui/material';
 
 // Iconos
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
@@ -30,7 +32,7 @@ import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import StarIcon from '@mui/icons-material/Star';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 
-// --- Componentes UI ---
+// --- Componentes UI (Tus componentes originales) ---
 const StatCard = ({ title, value, icon, color = 'primary', extra }) => (
   <Paper
     sx={{
@@ -89,7 +91,7 @@ const CourseCard = ({ course, isProfessor, navigate }) => (
   >
     <Box sx={{ position: 'relative', height: 120, background: 'linear-gradient(135deg, #1e1e1e 0%, #2c2c2c 100%)', p: 3 }}>
         <Box sx={{ display:'flex', justifyContent:'space-between'}}>
-            <Chip label={course.modules?.length + " Módulos"} size="small" sx={{ bgcolor:'rgba(0,0,0,0.4)', color:'white', backdropFilter:'blur(4px)' }} />
+            <Chip label={(course.modules?.length || 0) + " Módulos"} size="small" sx={{ bgcolor:'rgba(0,0,0,0.4)', color:'white', backdropFilter:'blur(4px)' }} />
             <Chip label={isProfessor ? "Activo" : "En curso"} color={isProfessor ? "success" : "primary"} size="small" />
         </Box>
         <Typography variant="h5" fontWeight="bold" noWrap sx={{color:'white', mt: 2}}>
@@ -122,16 +124,16 @@ const CourseCard = ({ course, isProfessor, navigate }) => (
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
 const itemVariants = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } };
-// === COMPONENTE CARRUSEL PARA SIDEBAR ===
+
 // === COMPONENTE CARRUSEL PARA SIDEBAR (FLECHAS DENTRO) ===
 const SidebarCarousel = ({ children }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Auto-play (Opcional: cambia cada 6 segundos)
+  // Auto-play
   useEffect(() => {
     const timer = setInterval(() => {
       nextSlide();
-    }, 6000); 
+    }, 8000); // Un poco más lento para leer
     return () => clearInterval(timer);
   }, [currentIndex]);
 
@@ -143,70 +145,36 @@ const SidebarCarousel = ({ children }) => {
     setCurrentIndex((prev) => (prev === 0 ? children.length - 1 : prev - 1));
   };
 
-  // Estilo común para los botones flotantes de navegación
   const navButtonStyle = {
-      position: 'absolute', // Fundamental para que floten
-      top: '50%',           // Centrado vertical
-      transform: 'translateY(-50%)', // Ajuste fino del centrado
-      zIndex: 10,           // Asegura que estén ENCIMA del contenido
-      
-      // Estilizado visual
-      bgcolor: 'rgba(0,0,0,0.4)', // Fondo oscuro semitransparente
-      color: 'white',
-      backdropFilter: 'blur(4px)', // Un toque moderno de desenfoque
-      width: 36, height: 36, // Tamaño fijo pequeño
-      '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' }, // Más oscuro al pasar el mouse
-      boxShadow: 3
+      position: 'absolute', top: '50%', transform: 'translateY(-50%)', zIndex: 10,
+      bgcolor: 'rgba(0,0,0,0.4)', color: 'white', backdropFilter: 'blur(4px)', 
+      width: 36, height: 36, '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' }, boxShadow: 3
   };
 
   return (
-    <Box sx={{ position: 'relative', width: '100%', pb: 3 }}> {/* pb:3 da espacio abajo para los puntitos */}
-      
-      {/* --- CONTENIDO DEL SLIDE --- */}
-      {/* Quitamos el minHeight para que se ajuste al contenido real */}
+    <Box sx={{ position: 'relative', width: '100%', pb: 3 }}>
       <Box sx={{ overflow: 'hidden', borderRadius: 4, position: 'relative' }}> 
-        <motion.div
-          key={currentIndex}
-          initial={{ opacity: 0, x: 100 }} // Animación más suave entrando de lado
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -100 }}
-          transition={{ duration: 0.4, ease: "easeInOut" }}
-        >
-          {children[currentIndex]}
-        </motion.div>
+        <AnimatePresence mode='wait'>
+            <motion.div
+            key={currentIndex}
+            initial={{ opacity: 0, x: 50 }} 
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -50 }}
+            transition={{ duration: 0.3 }}
+            >
+            {children[currentIndex]}
+            </motion.div>
+        </AnimatePresence>
       </Box>
 
-      {/* --- FLECHA IZQUIERDA (Flotante) --- */}
-      <IconButton 
-          onClick={prevSlide} 
-          size="small" 
-          sx={{ ...navButtonStyle, left: 8 }} // Pegado a la izquierda con un pequeño margen
-      >
-          <ArrowBackIosNewIcon fontSize="small" sx={{ fontSize: '1rem' }} />
-      </IconButton>
-      
-      {/* --- FLECHA DERECHA (Flotante) --- */}
-      <IconButton 
-          onClick={nextSlide} 
-          size="small" 
-          sx={{ ...navButtonStyle, right: 8 }} // Pegado a la derecha con un pequeño margen
-      >
-          <ArrowForwardIosIcon fontSize="small" sx={{ fontSize: '1rem' }}/>
-      </IconButton>
+      <IconButton onClick={prevSlide} size="small" sx={{ ...navButtonStyle, left: 8 }}><ArrowBackIosNewIcon fontSize="small" sx={{ fontSize: '1rem' }} /></IconButton>
+      <IconButton onClick={nextSlide} size="small" sx={{ ...navButtonStyle, right: 8 }}><ArrowForwardIosIcon fontSize="small" sx={{ fontSize: '1rem' }}/></IconButton>
 
-
-      {/* --- INDICADORES (PUNTITOS) --- */}
-      {/* Los dejamos abajo centrados */}
       <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, position: 'absolute', bottom: 0, width: '100%', left: 0 }}>
             {children.map((_, index) => (
                 <FiberManualRecordIcon 
                     key={index} 
-                    sx={{ 
-                        fontSize: 10, 
-                        cursor: 'pointer',
-                        color: index === currentIndex ? 'primary.main' : 'rgba(255,255,255,0.2)',
-                        transition: '0.3s'
-                    }}
+                    sx={{ fontSize: 10, cursor: 'pointer', color: index === currentIndex ? 'primary.main' : 'rgba(255,255,255,0.2)', transition: '0.3s' }}
                     onClick={() => setCurrentIndex(index)}
                 />
             ))}
@@ -214,6 +182,7 @@ const SidebarCarousel = ({ children }) => {
     </Box>
   );
 };
+
 // === COMPONENTE PRINCIPAL ===
 function HomePage() {
   const { user } = useAuth();
@@ -225,12 +194,22 @@ function HomePage() {
   const [courses, setCourses] = useState([]); 
   const [activityFeed, setActivityFeed] = useState([]); 
   const [loading, setLoading] = useState(true);
+  
+  // Estado para Modal de Crear Curso
+  const [openCreateModal, setOpenCreateModal] = useState(false);
+  const [newCourseTitle, setNewCourseTitle] = useState("");
+  const [newCourseDesc, setNewCourseDesc] = useState("");
+  const [creatingCourse, setCreatingCourse] = useState(false);
+  
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("");
 
-  useEffect(() => {
-    const fetchData = async () => {
+  // Cargar datos iniciales
+  const fetchData = async () => {
       if (!user) return;
       try {
-        setLoading(true);
+        // No mostramos spinner global al recargar para que sea fluido
+        // setLoading(true); 
         const statsRes = await axiosInstance.get('/api/dashboard/stats/');
         setStats(statsRes.data);
 
@@ -239,6 +218,7 @@ function HomePage() {
                 axiosInstance.get('/api/courses/'), 
                 axiosInstance.get('/api/dashboard/professor_activity/')
             ]);
+            // Filtramos solo los cursos del profesor actual
             const myCourses = coursesRes.data.filter(c => c.professor.id === user.id);
             setCourses(myCourses);
             setActivityFeed(activityRes.data);
@@ -247,9 +227,36 @@ function HomePage() {
             setCourses(enrollRes.data.map(e => e.course));
         }
       } catch (err) { console.error(err); } finally { setLoading(false); }
-    };
+  };
+
+  useEffect(() => {
     fetchData();
   }, [user, isProfessor]);
+
+  // Función para crear curso real
+  const handleCreateCourse = async () => {
+      if (!newCourseTitle.trim()) return;
+      setCreatingCourse(true);
+      try {
+          await axiosInstance.post('/api/courses/', {
+              title: newCourseTitle,
+              description: newCourseDesc,
+              is_published: true // Publicado por defecto para simplificar
+          });
+          setSnackbarMessage("¡Curso creado exitosamente!");
+          setSnackbarOpen(true);
+          setOpenCreateModal(false);
+          setNewCourseTitle("");
+          setNewCourseDesc("");
+          fetchData(); // Recargar la lista
+      } catch (err) {
+          console.error(err);
+          setSnackbarMessage("Error al crear el curso.");
+          setSnackbarOpen(true);
+      } finally {
+          setCreatingCourse(false);
+      }
+  };
 
   if (loading) return <Box sx={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><CircularProgress /></Box>;
 
@@ -261,7 +268,7 @@ function HomePage() {
       animate="visible"
       sx={{ width: '100%', height: '100%', overflowY: 'auto', bgcolor: 'background.default', overflowX: 'hidden' }}
     >
-      {/* 1. HERO BANNER (FULL WIDTH) */}
+      {/* 1. HERO BANNER */}
       <Box sx={{ 
           background: `linear-gradient(120deg, ${theme.palette.primary.dark}, ${theme.palette.primary.main})`, 
           color: 'white', pt: 6, pb: 12, 
@@ -284,7 +291,7 @@ function HomePage() {
                     size="large"
                     startIcon={<AddIcon />} 
                     sx={{ bgcolor: 'white', color: 'primary.main', fontWeight: 'bold', boxShadow: 3, '&:hover':{bgcolor:'#f0f0f0'} }}
-                    onClick={() => alert("Función de Crear Curso")}
+                    onClick={() => setOpenCreateModal(true)} // Abrir modal
                 >
                     Crear Nuevo Curso
                 </Button>
@@ -295,7 +302,7 @@ function HomePage() {
       {/* 2. CONTENEDOR PRINCIPAL */}
       <Box sx={{ width: '100%', px: { xs: 3, md: 5 }, pb: 8 }}>
         
-        {/* --- ESTADÍSTICAS (4 COLUMNAS) --- */}
+        {/* --- ESTADÍSTICAS --- */}
         {stats && (
             <Box sx={{ 
                 display: 'grid', 
@@ -340,17 +347,13 @@ function HomePage() {
 
         <Box sx={{ 
             display: 'grid',
-            // AQUÍ ESTÁ LA MAGIA: 
-            // En móviles (xs): 1 columna. 
-            // En escritorio (lg): 2 columnas (la primera ocupa el resto, la segunda fija de 360px)
             gridTemplateColumns: { xs: '1fr', lg: '1fr 360px' }, 
             gap: 4,
-            alignItems: 'start', // Esto ayuda a que el sticky sidebar no se estire
+            alignItems: 'start',
             width: '100%'
         }}>
             
             {/* === COLUMNA IZQUIERDA (Principal) === */}
-            {/* Eliminamos los width manuales. El Grid se encarga del tamaño. */}
             <Box sx={{ minWidth: 0 }}> 
                 
                 {/* Sección de Cursos */}
@@ -374,28 +377,32 @@ function HomePage() {
                     </Box>
                 </Box>
 
-                {/* ACCIONES RÁPIDAS (Solo Profesor) */}
+                {/* ACCIONES RÁPIDAS */}
                 {isProfessor && (
                     <Box>
                         <Typography variant="h6" fontWeight="700" sx={{ mb: 3, opacity: 0.7 }}>ACCIONES RÁPIDAS</Typography>
                         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 2 }}>
-                            <QuickActionCard icon={<BoltIcon />} title="Crear Quiz Rápido" description="Lanzar evaluación" color="warning" onClick={() => {}} />
-                            <QuickActionCard icon={<NotificationsActiveIcon />} title="Anuncio" description="Notificar a todos" color="info" onClick={() => {}} />
-                            <QuickActionCard icon={<SettingsIcon />} title="Configuración" description="Ajustes de la cuenta" color="grey" onClick={() => {}} />
+                            <QuickActionCard 
+                                icon={<BoltIcon />} title="Crear Quiz Rápido" description="Ir a un curso para crear" color="warning" 
+                                onClick={() => setSnackbarMessage("Entra a un curso > Lección para crear un Quiz.") || setSnackbarOpen(true)} 
+                            />
+                            <QuickActionCard 
+                                icon={<NotificationsActiveIcon />} title="Anuncio" description="Notificar a todos" color="info" 
+                                onClick={() => setSnackbarMessage("Función de anuncios próximamente.") || setSnackbarOpen(true)} 
+                            />
+                            <QuickActionCard 
+                                icon={<SettingsIcon />} title="Configuración" description="Ajustes de la cuenta" color="grey" 
+                                onClick={() => navigate('/settings')} 
+                            />
                         </Box>
                     </Box>
                 )}
             </Box>
 
             {/* === COLUMNA DERECHA (SIDEBAR FIJO) === */}
-            {/* Simplemente aplicamos sticky aquí directamente */}
-            <Box sx={{ 
-              position: { lg: 'sticky' }, 
-              top: { lg: 24 },
-              height: 'fit-content'
-            }}>
+            <Box sx={{ position: { lg: 'sticky' }, top: { lg: 24 }, height: 'fit-content' }}>
               
-              {/* 1. AGENDA (SE QUEDA FIJA FUERA DEL CARRUSEL) */}
+              {/* 1. AGENDA (ESTÁTICA PARA DISEÑO) */}
               <Paper sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', mb: 3, border: '1px solid rgba(255,255,255,0.1)' }}>
                   <Typography variant="h6" fontWeight="700" mb={2} sx={{display:'flex', alignItems:'center', gap:1}}>
                       <CalendarMonthIcon color="primary"/> Agenda
@@ -418,10 +425,9 @@ function HomePage() {
               </Paper>
 
               {/* === CARRUSEL DE WIDGETS === */}
-              {/* Aquí metemos los otros 3 componentes como hijos */}
               <SidebarCarousel>
                   
-                  {/* SLIDE 1: TOP ESTUDIANTES */}
+                  {/* SLIDE 1: TOP ESTUDIANTES (ESTÁTICO PARA DISEÑO) */}
                   <Paper sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', border: '1px solid rgba(255,255,255,0.1)', height: '100%' }}>
                       <Typography variant="h6" fontWeight="700" mb={2} sx={{display:'flex', alignItems:'center', gap:1}}>
                           <EmojiEventsIcon color="warning"/> Top Estudiantes
@@ -440,14 +446,14 @@ function HomePage() {
                       </List>
                   </Paper>
 
-                  {/* SLIDE 2: ACTIVIDAD RECIENTE */}
+                  {/* SLIDE 2: ACTIVIDAD RECIENTE (REAL DEL BACKEND) */}
                   <Paper sx={{ p: 3, borderRadius: 4, bgcolor: 'background.paper', border: '1px solid rgba(255,255,255,0.1)', height: '100%' }}>
                       <Typography variant="h6" fontWeight="700" mb={2} sx={{display:'flex', alignItems:'center', gap:1}}>
                           <NotificationsActiveIcon color="action"/> Últimas Entregas
                       </Typography>
                       {activityFeed.length > 0 ? (
                           <List>
-                              {activityFeed.slice(0, 2).map((sub) => ( // Mostramos solo 2 para que quepan bien
+                              {activityFeed.slice(0, 3).map((sub) => (
                                   <React.Fragment key={sub.id}>
                                       <ListItem alignItems="flex-start" sx={{ px: 0 }}>
                                           <ListItemAvatar>
@@ -471,7 +477,7 @@ function HomePage() {
                       )}
                   </Paper>
 
-                  {/* SLIDE 3: TIP / SABIAS QUE */}
+                  {/* SLIDE 3: TIP */}
                   <Paper sx={{ p: 3, borderRadius: 4, background: 'linear-gradient(135deg, #1a237e 0%, #283593 100%)', color: 'white', height: '100%', display:'flex', alignItems:'center' }}>
                       <Box sx={{ display: 'flex', gap: 2, alignItems: 'start' }}>
                           <HelpOutlineIcon fontSize="large"/>
@@ -485,12 +491,37 @@ function HomePage() {
                   </Paper>
 
               </SidebarCarousel>
-
-          </Box> {/* Fin Columna Derecha */}
-
+          </Box>
         </Box> 
-
       </Box>
+
+      {/* --- MODAL: CREAR CURSO --- */}
+      <Modal open={openCreateModal} onClose={() => setOpenCreateModal(false)}>
+        <Paper sx={{ 
+            position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+            width: 400, p: 4, borderRadius: 2, textAlign: 'center' 
+        }}>
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 700 }}>Crear Nuevo Curso</Typography>
+            <TextField 
+                fullWidth label="Título del Curso" sx={{ mb: 2 }} 
+                value={newCourseTitle} onChange={(e) => setNewCourseTitle(e.target.value)}
+            />
+            <TextField 
+                fullWidth label="Descripción Breve" multiline rows={3} sx={{ mb: 3 }} 
+                value={newCourseDesc} onChange={(e) => setNewCourseDesc(e.target.value)}
+            />
+            <Button 
+                fullWidth variant="contained" size="large"
+                disabled={creatingCourse || !newCourseTitle}
+                onClick={handleCreateCourse}
+            >
+                {creatingCourse ? <CircularProgress size={24} /> : "Crear Curso"}
+            </Button>
+        </Paper>
+      </Modal>
+
+      {/* Feedback */}
+      <Snackbar open={snackbarOpen} autoHideDuration={4000} onClose={() => setSnackbarOpen(false)} message={snackbarMessage} />
     </Box>
   );
 }
