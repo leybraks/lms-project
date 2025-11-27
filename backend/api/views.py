@@ -595,7 +595,7 @@ class ContactListView(generics.ListAPIView):
         # 2. Buscar cursos donde soy PROFESOR (Dueño)
         teacher_course_ids = list(Course.objects.filter(professor=user).values_list('id', flat=True))
         
-        # Unimos ambas listas de cursos (usamos set para evitar duplicados si eres ambos)
+        # Unimos ambas listas de cursos
         all_course_ids = set(student_course_ids + teacher_course_ids)
         
         if not all_course_ids:
@@ -621,7 +621,6 @@ class ContactListView(generics.ListAPIView):
         
         # Devolver los usuarios
         return User.objects.filter(id__in=all_related_ids)
-
 # ====================================================================
 # NUEVA VISTA: Iniciar un Mensaje Directo (1-a-1)
 # ====================================================================
