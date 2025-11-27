@@ -56,8 +56,9 @@ const StatCard = ({ title, value, icon, color = 'primary', extra }) => (
   </Paper>
 );
 
-const QuickActionCard = ({ icon, title, color, description }) => (
+const QuickActionCard = ({ icon, title, color, description, onClick }) => (
     <Paper
+        onClick={onClick}
         sx={{
             p: 2, display: 'flex', alignItems: 'center', gap: 2, borderRadius: 3,
             bgcolor: 'background.paper', border: '1px solid rgba(255,255,255,0.05)',
@@ -107,11 +108,11 @@ const CourseCard = ({ course, isProfessor, navigate }) => (
         </Box>
         <Button 
             fullWidth 
-            variant="outlined"
-            startIcon={<EditIcon />}
+            variant={isProfessor ? "outlined" : "contained"} 
+            startIcon={isProfessor ? <EditIcon /> : <PlayCircleOutlineIcon />}
             sx={{ borderRadius: 2 }}
         >
-            Gestionar Curso
+            {isProfessor ? "Gestionar Curso" : "Continuar"}
         </Button>
     </CardContent>
   </Card>
@@ -133,7 +134,6 @@ function HomePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // ... (Tu lógica de fetch sigue igual) ...
     const fetchData = async () => {
       if (!user) return;
       try {
@@ -181,7 +181,7 @@ function HomePage() {
                     Hola, {user.username} 👋
                 </Typography>
                 <Typography variant="h6" sx={{ opacity: 0.8, fontWeight: 400 }}>
-                    Bienvenido a tu centro de comando docente.
+                    {isProfessor ? "Bienvenido a tu centro de comando docente." : "¡Es un gran día para aprender algo nuevo!"}
                 </Typography>
             </Box>
             {isProfessor && (
@@ -190,7 +190,7 @@ function HomePage() {
                     size="large"
                     startIcon={<AddIcon />} 
                     sx={{ bgcolor: 'white', color: 'primary.main', fontWeight: 'bold', boxShadow: 3, '&:hover':{bgcolor:'#f0f0f0'} }}
-                    onClick={() => alert("Crear Curso Pendiente")}
+                    onClick={() => alert("Función de Crear Curso Pendiente")}
                 >
                     Crear Nuevo Curso
                 </Button>
@@ -258,20 +258,24 @@ function HomePage() {
                                 </motion.div>
                             ))
                         ) : (
-                            <Alert severity="info" sx={{ width: '100%' }}>Aún no has creado ningún curso.</Alert>
+                            <Alert severity="info" sx={{ width: '100%' }}>
+                                {isProfessor ? "Aún no has creado ningún curso." : "No estás inscrito en ningún curso."}
+                            </Alert>
                         )}
                     </Box>
                 </Box>
 
                 {/* ACCIONES RÁPIDAS */}
-                <Box>
-                    <Typography variant="h6" fontWeight="700" sx={{ mb: 3, opacity: 0.7 }}>ACCIONES RÁPIDAS</Typography>
-                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 2 }}>
-                        <QuickActionCard icon={<BoltIcon />} title="Crear Quiz Rápido" description="Lanzar evaluación" color="warning" onClick={() => {}} />
-                        <QuickActionCard icon={<NotificationsActiveIcon />} title="Anuncio" description="Notificar a todos" color="info" onClick={() => {}} />
-                        <QuickActionCard icon={<SettingsIcon />} title="Configuración" description="Ajustes de la cuenta" color="grey" onClick={() => {}} />
+                {isProfessor && (
+                    <Box>
+                        <Typography variant="h6" fontWeight="700" sx={{ mb: 3, opacity: 0.7 }}>ACCIONES RÁPIDAS</Typography>
+                        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 2 }}>
+                            <QuickActionCard icon={<BoltIcon />} title="Crear Quiz Rápido" description="Lanzar evaluación" color="warning" onClick={() => {}} />
+                            <QuickActionCard icon={<NotificationsActiveIcon />} title="Anuncio" description="Notificar a todos" color="info" onClick={() => {}} />
+                            <QuickActionCard icon={<SettingsIcon />} title="Configuración" description="Ajustes de la cuenta" color="grey" onClick={() => {}} />
+                        </Box>
                     </Box>
-                </Box>
+                )}
 
             </Grid>
 
