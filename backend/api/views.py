@@ -579,8 +579,9 @@ class MessageListView(generics.ListCreateAPIView):
 # ====================================================================
 class ContactListView(generics.ListAPIView):
     """
-    Devuelve una lista de todos los usuarios (compañeros y profesores)
-    que comparten al menos un curso con el usuario actual.
+    Devuelve una lista de "Contactos":
+    - Si soy alumno: Mis compañeros y profesores.
+    - Si soy profesor: Mis alumnos.
     """
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
@@ -588,30 +589,38 @@ class ContactListView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         
-        # 1. Obtener los IDs de los cursos en los que el usuario está inscrito
-        enrolled_course_ids = Enrollment.objects.filter(user=user).values_list('course_id', flat=True)
+        # 1. Buscar cursos donde soy ALUMNO (Inscripciones)
+        student_course_ids = list(Enrollment.objects.filter(user=user).values_list('course_id', flat=True))
         
-        if not enrolled_course_ids:
-            return User.objects.none() # No devolver nada si no está en cursos
+        # 2. Buscar cursos donde soy PROFESOR (Dueño)
+        teacher_course_ids = list(Course.objects.filter(professor=user).values_list('id', flat=True))
+        
+        # Unimos ambas listas de cursos (usamos set para evitar duplicados si eres ambos)
+        all_course_ids = set(student_course_ids + teacher_course_ids)
+        
+        if not all_course_ids:
+            return User.objects.none()
             
-        # 2. Obtener los IDs de los profesores de esos cursos
+        # 3. Buscar gente relacionada a estos cursos
+        
+        # A. Los profesores de esos cursos (para que el alumno vea al profe)
         professor_ids = Course.objects.filter(
-            id__in=enrolled_course_ids
+            id__in=all_course_ids
         ).values_list('professor_id', flat=True)
         
-        # 3. Obtener los IDs de todos los alumnos (compañeros) en esos cursos
-        classmate_ids = Enrollment.objects.filter(
-            course_id__in=enrolled_course_ids
+        # B. Los alumnos de esos cursos (para que el profe vea a sus alumnos)
+        student_ids = Enrollment.objects.filter(
+            course_id__in=all_course_ids
         ).values_list('user_id', flat=True)
         
-        # 4. Combinar todos los IDs (usando 'set' para eliminar duplicados)
-        all_related_ids = set(professor_ids) | set(classmate_ids)
+        # 4. Unir todos los IDs y EXCLUIRME a mí mismo
+        all_related_ids = set(professor_ids) | set(student_ids)
         
-        # 5. Devolver los objetos User, excluyendo al propio usuario
-        return User.objects.filter(
-            id__in=all_related_ids
-        ).exclude(id=user.id)
-
+        if user.id in all_related_ids:
+            all_related_ids.remove(user.id)
+        
+        # Devolver los usuarios
+        return User.objects.filter(id__in=all_related_ids)
 
 # ====================================================================
 # NUEVA VISTA: Iniciar un Mensaje Directo (1-a-1)
