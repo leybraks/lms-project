@@ -59,15 +59,16 @@ class ListaDeCursosView(generics.ListAPIView):
     AHORA ESTÁ OPTIMIZADO.
     """
     serializer_class = CourseSerializer
-    permission_classes = [IsAuthenticated] # O [AllowAny] si quieres que todos vean los cursos
+    permission_classes = [IsAuthenticated] 
 
     def get_queryset(self):
-        # 1. Solo muestra cursos que están 'publicados'
-        # 2. Usa 'select_related' para traer al profesor en la misma consulta (eficiente)
-        # 3. Usa 'annotate' para contar los módulos de cada curso (súper eficiente)
         return Course.objects.filter(is_published=True) \
                              .select_related('professor') \
-                             .annotate(modules_count=Count('modules'))
+                             .annotate(
+                                 modules_count=Count('modules', distinct=True),
+                                 # --- ¡FALTABA ESTA LÍNEA! ---
+                                 enrollments_count=Count('enrollments', distinct=True) 
+                             ).order_by('-created_at')
 
 class DetalleDeCursoView(generics.RetrieveAPIView):
     """
