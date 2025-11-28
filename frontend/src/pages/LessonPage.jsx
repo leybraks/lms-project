@@ -1583,65 +1583,151 @@ function LessonPage() {
             flexDirection: 'column',
             gap: 3
         }}>
-
+          {/* 1. Video o Clase en Vivo (¡AHORA FUNCIONAL!) */}
           <motion.div variants={itemVariants}>
             <Paper sx={{...glassPaperStyle(theme), p: 1, overflow: 'hidden' }}>
               
+              {/* --- Lógica de Renderizado --- */}
               {lesson.live_session_room ? (
                   
-                  // --- VISTA DE CLASE EN VIVO (BOTÓN DE UNIRSE) ---
+                  // --- VISTA DE CLASE EN VIVO (JITSI) ---
                   <Box
                     sx={{
                       height: '70vh',
                       minHeight: 500,
                       borderRadius: 3,
                       overflow: 'hidden',
-                      bgcolor: 'black',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexDirection: 'column',
-                      gap: 2
+                      bgcolor: 'background.default'
                     }}
                   >
-                    {callState.isOpen && callState.roomName === lesson.live_session_room ? (
-                        <>
-                            {/* Si ya le dio click y la ventana está flotando */}
-                            <LiveTvIcon sx={{ fontSize: 60, color: 'green' }} />
-                            <Typography color="white">La clase está activa en una ventana flotante.</Typography>
-                            <Button 
-                                variant="outlined" 
-                                color="inherit" 
-                                size="small" 
-                                onClick={() => startCall(lesson.live_session_room)} // Vuelve a traer la ventana al frente
-                                sx={{ color: 'white', borderColor: 'white', mt: 2 }}
-                            >
-                                Traer al frente
-                            </Button>
-                        </>
-                    ) : (
-                        <>
-                             {/* Estado inicial: Botón para unirse */}
-                             <LiveTvIcon sx={{ fontSize: 60, color: 'error.main', mb: 2 }} />
-                             <Typography variant="h5" color="white" gutterBottom>Clase en Vivo Disponible</Typography>
-                             <Button 
-                                variant="contained" 
-                                color="error" 
-                                size="large"
-                                onClick={() => startCall(lesson.live_session_room)}
-                            >
-                                Unirse a la Clase
-                            </Button>
-                        </>
-                    )}
+                    <JitsiMeeting
+                      roomName={lesson.live_session_room}
+                      userInfo={{ displayName: user.username }}
+
+                      // --- NIVEL 2: THEME PERSONALIZADO ---
+                      configOverwrite={{
+                        prejoinPageEnabled: true,
+                        startWithAudioMuted: true,
+                        startWithVideoMuted: true,
+                        analytics: { disabled: true },
+                        disableThirdPartyRequests: true,
+
+                        // Fusionar Jitsi con tu theme de MUI
+                        defaultLanguage: "es",
+                        toolbarConfig: {
+                          toolbarButtons: [
+                            "microphone", "camera", "desktop", "raisehand",
+                            "fullscreen", "tileview", "hangup"
+                          ]
+                        },
+                      }}
+
+                      interfaceConfigOverwrite={{
+                        // Evitar cualquier branding o watermark
+                        SHOW_JITSI_WATERMARK: false,
+                        SHOW_WATERMARK_FOR_GUESTS: false,
+                        SHOW_BRAND_WATERMARK: false,
+                        SHOW_POWERED_BY: false,
+                        SHOW_CHROME_EXTENSION_BANNER: false,
+
+                        // Cambiar nombre interno de la plataforma
+                        APP_NAME: 'Tu Plataforma',
+                        NATIVE_APP_NAME: 'Tu Plataforma',
+                        PROVIDER_NAME: 'Tu Marca',
+
+                        // Tema de colores → MUI Theme
+                        MAIN_COLOR: theme.palette.primary.main,
+                        TOOLBAR_BACKGROUND: theme.palette.background.paper,
+                        DEFAULT_BACKGROUND: theme.palette.background.default,
+
+                        // Elimina botones sensibles
+                        TOOLBAR_BUTTONS: [
+                          'microphone',
+                          'camera',
+                          'raisehand',
+                          'desktop',
+                          'fullscreen',
+                          'tileview',
+                          'hangup'
+                        ],
+                      }}
+
+                      // --- NIVEL 1: INYECTOR PARA 100% OCULTAR JITSI ---
+                      getIFrameRef={(iframeRef) => {
+                        iframeRef.style.height = "100%";
+                        iframeRef.style.width = "100%";
+
+                        const injectCSS = () => {
+                          try {
+                            const iframeDoc = iframeRef.contentWindow?.document;
+                            if (!iframeDoc || !iframeDoc.head) return false;
+
+                            const style = iframeDoc.createElement("style");
+                            style.innerHTML = `
+                              /* Ocultar logos / branding */
+                              .jitsi-logo,
+                              .watermark,
+                              .watermark-left,
+                              .atlas-logo,
+                              a[href*="jitsi"],
+                              .branding,
+                              .header-logo-container {
+                                display: none !important;
+                                visibility: hidden !important;
+                              }
+
+                              /* Prejoin: textos */
+                              .premeeting-screen .title,
+                              .premeeting-screen .description {
+                                display: none !important;
+                              }
+
+                              /* Powered by */
+                              .poweredby,
+                              .attribution-wrap {
+                                display: none !important;
+                              }
+
+                              /* Banners */
+                              .chrome-extension-banner,
+                              .extension-banner,
+                              .notice,
+                              .notice-warning,
+                              .notice-info {
+                                display: none !important;
+                              }
+                            `;
+
+                            iframeDoc.head.appendChild(style);
+                            return true; // Inyección exitosa
+                          } catch (e) {
+                            return false;
+                          }
+                        };
+
+                        // Intentar cada 300ms hasta que cargue el DOM
+                        const interval = setInterval(() => {
+                          const success = injectCSS();
+                          if (success) {
+                            clearInterval(interval);
+                            console.log("✔ CSS inyectado en Jitsi");
+                          }
+                        }, 300);
+
+                        // Failsafe (detener a los 8s para no dejarlo infinito)
+                        setTimeout(() => clearInterval(interval), 8000);
+                      }}
+
+                    />
                   </Box>
 
+                  
               ) : (
                 
-                // --- VISTA DE VIDEO PREGRABADO (Youtube/Vimeo) ---
+                // --- VISTA DE VIDEO PREGRABADO (Normal) ---
                 <Box sx={{ mt: 1, borderRadius: 2, overflow: 'hidden', position: 'relative', paddingBottom: '56.25%', height: 0, bgcolor: 'background.default' }}>
                   <iframe
-                    src={lesson.video_url} 
+                    src={lesson.video_url} // <-- El video de YouTube/Vimeo
                     title={lesson.title}
                     frameBorder="0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
