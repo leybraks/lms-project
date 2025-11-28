@@ -7,28 +7,14 @@ import { AnimatePresence, motion } from "framer-motion";
 import ExtensionIcon from '@mui/icons-material/Extension';
 
 // --- 1. IMPORTACIONES NUEVAS PARA LA VIDEOLLAMADA ---
+// (Asegúrate de haber creado estos archivos en los pasos anteriores)
 import { VideoCallProvider } from '../context/VideoCallContext';
 import GlobalJitsi from '../components/GlobalJitsi';
-// ----------------------------------------------------
 
 import { 
-  AppBar, 
-  Box, 
-  CssBaseline, 
-  Drawer, 
-  List, 
-  ListItemButton, 
-  ListItemIcon, 
-  ListItemText, 
-  Toolbar, 
-  Typography,
-  Divider,
-  ListSubheader,
-  Avatar,
-  IconButton,
-  InputBase, 
-  Badge, 
-  Paper
+  AppBar, Box, CssBaseline, Drawer, List, ListItemButton, ListItemIcon, 
+  ListItemText, Toolbar, Typography, Divider, ListSubheader, Avatar, 
+  IconButton, InputBase, Badge, Paper
 } from '@mui/material';
 
 // Iconos
@@ -42,7 +28,6 @@ import NotificationsIcon from '@mui/icons-material/Notifications';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 
-
 const drawerWidth = 280; 
 
 function MainLayout() {
@@ -54,12 +39,12 @@ function MainLayout() {
   const [openSettings, setOpenSettings] = useState(false); 
 
   return (
-    // --- 2. ENVOLVER TODO EL LAYOUT CON EL PROVIDER ---
+    // --- 2. ENVOLVEMOS TODO EN EL PROVIDER ---
     <VideoCallProvider>
       <Box sx={{ display: 'flex', bgcolor: 'background.default', minHeight: '100vh' }}>
         <CssBaseline />
         
-        {/* BARRA SUPERIOR (APPBAR) */}
+        {/* BARRA SUPERIOR (APPBAR) - Sin cambios */}
         <AppBar 
           position="fixed" 
           color="transparent"
@@ -76,12 +61,8 @@ function MainLayout() {
               <Paper 
                   component="form"
                   sx={{ 
-                      p: '2px 8px', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      width: 300, 
-                      borderRadius: 12,
-                      backgroundColor: theme.palette.mode === 'dark' ? '#3B3D40' : '#EAEFF8', 
+                      p: '2px 8px', display: 'flex', alignItems: 'center', width: 300, 
+                      borderRadius: 12, backgroundColor: theme.palette.mode === 'dark' ? '#3B3D40' : '#EAEFF8', 
                       boxShadow: 'none', 
                   }}
               >
@@ -113,7 +94,7 @@ function MainLayout() {
           </Toolbar>
         </AppBar>
         
-        {/* BARRA LATERAL (DRAWER) */}
+        {/* BARRA LATERAL (DRAWER) - Sin cambios */}
         <Drawer
           sx={{
             width: drawerWidth,
@@ -205,20 +186,15 @@ function MainLayout() {
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
-              style={{
-                position: 'absolute',
-                width: '100%',
-                height: '100%'
-              }}
+              style={{ position: 'absolute', width: '100%', height: '100%' }}
             >
               <Outlet />
             </motion.div>
           </AnimatePresence>
         </Box>
 
-        {/* --- 3. COMPONENTE DE VIDEOLLAMADA FLOTANTE --- */}
-        {/* Vive fuera del Outlet para persistir entre cambios de página */}
-        <GlobalJitsi /> 
+        {/* --- 3. EL COMPONENTE GLOBAL FLOTANTE (Fuera del Outlet) --- */}
+        <GlobalJitsi />
 
       </Box>
     </VideoCallProvider>
