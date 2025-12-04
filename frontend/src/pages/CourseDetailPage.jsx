@@ -540,12 +540,36 @@ const LessonItem = ({ lesson, isOwner, navigate, courseId, onUploadFile, onEditI
                         secondaryAction={
                             <Box>
                                 {item.type === 'file' ? (
-                                    <IconButton size="small" color="primary" href={item.file} target="_blank" download><DownloadIcon fontSize="small"/></IconButton>
+                                    <IconButton size="small" color="primary" href={item.file} target="_blank" download sx={{mr:1}}>
+                                        <DownloadIcon fontSize="small"/>
+                                    </IconButton>
                                 ) : (
-                                    <Button size="small" onClick={() => navigate(`/courses/${courseId}/lessons/${lesson.id}`)}>Ir</Button>
+                                    <Button 
+                                        size="small" 
+                                        variant={isOwner && item.type === 'assignment' ? "contained" : "text"} // Destacar si es calificar
+                                        color={isOwner && item.type === 'assignment' ? "primary" : "inherit"}
+                                        sx={{ minWidth: 0, px: 2 }}
+                                        onClick={() => {
+                                            // --- LÓGICA INTELIGENTE ---
+                                            if (isOwner && item.type === 'assignment') {
+                                                // Si soy profe y es tarea -> Voy al Gradebook
+                                                navigate(`/courses/${courseId}/grades`);
+                                            } else {
+                                                // Si soy alumno o es otro contenido -> Voy a la Lección
+                                                navigate(`/courses/${courseId}/lessons/${lesson.id}`);
+                                            }
+                                        }}
+                                    >
+                                        {/* Cambiamos el texto del botón según el caso */}
+                                        {isOwner && item.type === 'assignment' ? 'Calificar' : 'Ir'}
+                                    </Button>
                                 )}
+                                
+                                {/* Botón de Editar (Lápiz) */}
                                 {isOwner && (
-                                    <IconButton size="small" onClick={() => onEditItem('edit_' + item.type, item.id)}><EditIcon fontSize="small" /></IconButton>
+                                    <IconButton size="small" onClick={() => onEditItem('edit_' + item.type, item.id)}>
+                                        <EditIcon fontSize="small" />
+                                    </IconButton>
                                 )}
                             </Box>
                         }
