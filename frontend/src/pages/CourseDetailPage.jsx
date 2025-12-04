@@ -8,6 +8,7 @@ import CreateLiveQuiz from '../components/CreateLiveQuiz';
 import CreateLiveCodeChallenge from '../components/CreateLiveCodeChallenge';
 import AssignmentIcon from '@mui/icons-material/Assignment'; // <--- NUEVO ICONO
 import CreateAssignmentModal from '../components/CreateAssignmentModal';
+import AssignmentIcon from '@mui/icons-material/Assignment';
 // --- Componentes de UI Material ---
 import {
   Box, Typography, CircularProgress, Alert, Button, Paper, Divider, Snackbar,
@@ -45,7 +46,6 @@ import {
   Download as DownloadIcon,
   Grade as GradeIcon,
   MenuBook as MenuBookIcon,
-  Assignment as AssignmentIcon
 } from '@mui/icons-material';
 
 // --- Helper para formatear bytes ---
