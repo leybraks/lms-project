@@ -1,252 +1,231 @@
-// frontend/src/pages/GradebookPage.jsx
-
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import axiosInstance from '../api/axios';
-import { useTheme } from '@mui/material/styles';
-import { motion } from "framer-motion";
-import {
-  Box,
-  Typography,
-  CircularProgress,
-  Alert,
-  Paper,
-  Breadcrumbs,
-  Link,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Chip,
-  Button
+import { 
+    Box, Typography, Paper, Grid, Select, MenuItem, FormControl, InputLabel, 
+    Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
+    Avatar, Chip, Button, IconButton, Dialog, DialogTitle, DialogContent, 
+    TextField, DialogActions, Link, CircularProgress, Alert
 } from '@mui/material';
-
-// --- Iconos ---
-import NavigateNextIcon from '@mui/icons-material/NavigateNext';
-import AssessmentIcon from '@mui/icons-material/Assessment';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import PendingIcon from '@mui/icons-material/Pending';
-
-// === VARIANTES DE ANIMACIÓN ===
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      delayChildren: 0.2, 
-      staggerChildren: 0.1 
-    }
-  }
-};
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { 
-    opacity: 1, 
-    y: 0,
-    transition: { ease: "easeOut" }
-  }
-};
-
-// --- Función de Scrollbar ---
-const getScrollbarStyles = (theme) => ({
-  scrollbarWidth: 'thin',
-  scrollbarColor: `${theme.palette.primary.main} ${theme.palette.background.paper}`,
-  '&::-webkit-scrollbar': { width: '8px' },
-  '&::-webkit-scrollbar-track': { backgroundColor: 'transparent', borderRadius: '10px' },
-  '&::-webkit-scrollbar-thumb': {
-    backgroundColor: theme.palette.primary.main,
-    borderRadius: '10px',
-    border: `2px solid ${theme.palette.background.default}`,
-    backgroundClip: 'content-box',
-  },
-  '&::-webkit-scrollbar-thumb:hover': { backgroundColor: theme.palette.primary.dark }
-});
-
-// --- Función Helper para formatear Fecha ---
-const formatDate = (dateString) => {
-  if (!dateString) return "Sin fecha";
-  return new Date(dateString).toLocaleDateString("es-ES", {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  });
-};
+import RateReviewIcon from '@mui/icons-material/RateReview';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import DownloadIcon from '@mui/icons-material/Download';
 
 function GradebookPage() {
-  const { courseId } = useParams();
-  const navigate = useNavigate();
-  const theme = useTheme(); 
-  
-  const [gradedItems, setGradedItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  // (Opcional) Cargar el nombre del curso
-  const [courseTitle, setCourseTitle] = useState(""); 
+    const { courseId } = useParams();
+    const navigate = useNavigate();
+    
+    // Estados
+    const [assignments, setAssignments] = useState([]);
+    const [selectedAssignment, setSelectedAssignment] = useState('');
+    const [submissions, setSubmissions] = useState([]);
+    const [loading, setLoading] = useState(true);
+    
+    // Estado del Modal de Calificación
+    const [openGradeModal, setOpenGradeModal] = useState(false);
+    const [currentSub, setCurrentSub] = useState(null);
+    const [score, setScore] = useState('');
+    const [comments, setComments] = useState('');
 
-  useEffect(() => {
-    const fetchGradebook = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        // Carga los items calificables
-        const response = await axiosInstance.get(`/api/courses/${courseId}/grades/`);
-        setGradedItems(response.data);
-        
-        // (Opcional) Carga los detalles del curso solo para el título
-        const courseResponse = await axiosInstance.get(`/api/courses/${courseId}/`);
-        setCourseTitle(courseResponse.data.title);
+    // 1. Cargar la lista de tareas del curso
+    useEffect(() => {
+        axiosInstance.get(`/api/courses/${courseId}/gradebook/`) // Usamos la vista existente que lista items del curso
+            .then(res => {
+                // Filtramos solo las que son tareas (type='assignment' si tu backend lo devuelve así, 
+                // o asumimos que lo que devuelve son tareas según tu GradebookView actual)
+                setAssignments(res.data);
+                setLoading(false);
+            })
+            .catch(err => console.error(err));
+    }, [courseId]);
 
-      } catch (err) {
-        console.error("Error al cargar el libro de calificaciones:", err);
-        setError("No se pudieron cargar tus calificaciones.");
-      } finally {
-        setLoading(false);
-      }
+    // 2. Cargar entregas cuando selecciono una tarea
+    useEffect(() => {
+        if (!selectedAssignment) return;
+        
+        axiosInstance.get(`/api/assignments/${selectedAssignment}/submissions/`)
+            .then(res => setSubmissions(res.data))
+            .catch(err => console.error(err));
+    }, [selectedAssignment]);
+
+    const handleOpenGrade = (sub) => {
+        setCurrentSub(sub);
+        setScore(sub.grade ? sub.grade.score : '');
+        setComments(sub.grade ? sub.grade.comments : '');
+        setOpenGradeModal(true);
     };
-    fetchGradebook();
-  }, [courseId]);
 
-  // --- RENDERING DE ESTADOS ---
-  if (loading) {
-    return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress /></Box>;
-  }
-  if (error) {
-    return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><Alert severity="error">{error}</Alert></Box>;
-  }
+    const submitGrade = async () => {
+        try {
+            await axiosInstance.post(`/api/submissions/${currentSub.id}/grade/`, {
+                score,
+                comments
+            });
+            // Actualizar lista local
+            setSubmissions(prev => prev.map(s => {
+                if (s.id === currentSub.id) {
+                    return { ...s, status: 'GRADED', grade: { score, comments } };
+                }
+                return s;
+            }));
+            setOpenGradeModal(false);
+        } catch (error) {
+            alert("Error al guardar la nota");
+        }
+    };
 
-  // --- RENDERIZADO PRINCIPAL ---
-  return (
-    <Box 
-      component={motion.div}
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-      sx={{ 
-        height: '100%', 
-        p: 3, 
-        boxSizing: 'border-box',
-        overflowY: 'auto',
-        ...getScrollbarStyles(theme)
-      }}
-    >
-      {/* 1. Breadcrumbs (Animado) */}
-      <motion.div variants={itemVariants}>
-        <Breadcrumbs separator={<NavigateNextIcon fontSize="small" />} sx={{ mb: 2 }}>
-          <Link component={RouterLink} underline="hover" color="inherit" to="/">
-            Dashboard
-          </Link>
-          <Link component={RouterLink} underline="hover" color="inherit" to={`/courses/${courseId}`}>
-            {courseTitle || `Curso ${courseId}`}
-          </Link>
-          <Typography color="text.primary">Libro de Calificaciones</Typography>
-        </Breadcrumbs>
-        <Typography 
-          variant="h4" 
-          component="h1" 
-          gutterBottom
-          sx={{ fontWeight: 700, mb: 3 }}
-        >
-          Libro de Calificaciones
-        </Typography>
-      </motion.div>
+    if (loading) return <Box p={5} textAlign="center"><CircularProgress /></Box>;
 
-      {/* 2. Tabla de Calificaciones */}
-      <motion.div variants={itemVariants}>
-        <Paper 
-          sx={{ 
-            width: '100%', 
-            overflow: 'hidden',
-            borderRadius: 4,
-            border: `1px solid ${theme.palette.divider}`,
-            boxShadow: '0 4px 12px 0 rgba(0, 0, 0, 0.05)',
-          }}
-        >
-          <TableContainer sx={{ maxHeight: 'calc(100vh - 200px)' }}>
-            <Table stickyHeader aria-label="tabla de calificaciones">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 600 }}>Nombre del elemento</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Fecha de vencimiento</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Estado</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }} align="right">Calificación</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }} align="center">Resultados</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {gradedItems.map((item) => {
-                  const submission = item.submission;
-                  const grade = submission?.grade;
-                  const isPastDue = item.due_date && new Date() > new Date(item.due_date);
-                  
-                  let statusLabel = "Sin abrir";
-                  let statusColor = "default";
-                  if (submission) {
-                    statusLabel = submission.status; // "SUBMITTED" o "GRADED"
-                    statusColor = submission.status === "GRADED" ? "success" : "info";
-                  } else if (isPastDue) {
-                    statusLabel = "Vencido";
-                    statusColor = "error";
-                  }
+    return (
+        <Box sx={{ p: 4, width: '100%' }}>
+            <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(`/courses/${courseId}`)} sx={{ mb: 2 }}>
+                Volver al Curso
+            </Button>
+            
+            <Typography variant="h4" fontWeight="bold" gutterBottom>Libro de Calificaciones</Typography>
+            <Typography variant="body1" color="text.secondary" mb={4}>Selecciona una tarea para ver y calificar las entregas de tus alumnos.</Typography>
 
-                  return (
-                    <TableRow 
-                      hover 
-                      key={item.id} 
-                      sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
+            {/* SELECTOR DE TAREA */}
+            <Paper sx={{ p: 3, mb: 4 }}>
+                <FormControl fullWidth>
+                    <InputLabel>Seleccionar Tarea a Calificar</InputLabel>
+                    <Select
+                        value={selectedAssignment}
+                        label="Seleccionar Tarea a Calificar"
+                        onChange={(e) => setSelectedAssignment(e.target.value)}
                     >
-                      <TableCell component="th" scope="row">
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <AssessmentIcon fontSize="small" color="action" />
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            {item.title}
-                          </Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell>{formatDate(item.due_date)}</TableCell>
-                      <TableCell>
-                        <Chip label={statusLabel} color={statusColor} size="small" variant="outlined" />
-                      </TableCell>
-                      <TableCell align="right">
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          {grade ? `${grade.score} / 20` : "N/A"}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="center">
-                        {/* El botón "Vista" (como en tu captura) */}
-                        <Button 
-                          variant="contained" 
-                          size="small" 
-                          disabled={!submission}
-                          onClick={() => {
-                            // (Opcional) Podríamos navegar a una página de "Ver Entrega"
-                            // Por ahora, solo lo deshabilitamos si no hay entrega
-                          }}
-                        >
-                          Vista
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {gradedItems.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} align="center">
-                      <Typography color="text.secondary" sx={{p: 3}}>
-                        Aún no hay elementos calificables para este curso.
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
-      </motion.div>
-    </Box>
-  );
+                        {assignments.map((assign) => (
+                            <MenuItem key={assign.id} value={assign.id}>
+                                {assign.title} (Vence: {assign.due_date ? new Date(assign.due_date).toLocaleDateString() : 'Sin fecha'})
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+            </Paper>
+
+            {/* TABLA DE ENTREGAS */}
+            {selectedAssignment && (
+                <TableContainer component={Paper} variant="outlined">
+                    <Table>
+                        <TableHead sx={{ bgcolor: 'action.hover' }}>
+                            <TableRow>
+                                <TableCell>Alumno</TableCell>
+                                <TableCell>Entrega</TableCell>
+                                <TableCell>Fecha</TableCell>
+                                <TableCell>Estado</TableCell>
+                                <TableCell align="center">Acción</TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {submissions.length > 0 ? (
+                                submissions.map((sub) => (
+                                    <TableRow key={sub.id}>
+                                        <TableCell>
+                                            <Box display="flex" alignItems="center" gap={2}>
+                                                <Avatar src={sub.user_image}>{sub.user_username ? sub.user_username[0] : '?'}</Avatar>
+                                                <Typography fontWeight="bold">{sub.user_username}</Typography>
+                                            </Box>
+                                        </TableCell>
+                                        <TableCell>
+                                            {sub.file_submission ? (
+                                                <Button 
+                                                    startIcon={<DownloadIcon />} 
+                                                    href={sub.file_submission} 
+                                                    target="_blank"
+                                                    size="small"
+                                                >
+                                                    Ver Archivo
+                                                </Button>
+                                            ) : (
+                                                <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
+                                                    "{sub.content?.substring(0, 30)}..."
+                                                </Typography>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>{new Date(sub.submitted_at).toLocaleDateString()}</TableCell>
+                                        <TableCell>
+                                            {sub.status === 'GRADED' ? (
+                                                <Chip label={`Nota: ${sub.grade?.score}`} color="success" size="small" icon={<CheckCircleIcon />} />
+                                            ) : (
+                                                <Chip label="Pendiente" color="warning" size="small" icon={<PendingIcon />} />
+                                            )}
+                                        </TableCell>
+                                        <TableCell align="center">
+                                            <Button 
+                                                variant="contained" 
+                                                size="small" 
+                                                startIcon={<RateReviewIcon />}
+                                                onClick={() => handleOpenGrade(sub)}
+                                            >
+                                                Calificar
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
+                                        <Typography color="text.secondary">No hay entregas para esta tarea aún.</Typography>
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            )}
+
+            {/* MODAL DE CALIFICACIÓN */}
+            <Dialog open={openGradeModal} onClose={() => setOpenGradeModal(false)} maxWidth="sm" fullWidth>
+                <DialogTitle>Calificar Entrega</DialogTitle>
+                <DialogContent dividers>
+                    {currentSub && (
+                        <>
+                            <Typography variant="subtitle2" gutterBottom>Alumno: {currentSub.user_username}</Typography>
+                            
+                            {/* Mostrar contenido completo de la entrega */}
+                            <Paper variant="outlined" sx={{ p: 2, mb: 3, bgcolor: 'action.hover' }}>
+                                {currentSub.content && (
+                                    <Typography variant="body2" paragraph>
+                                        <strong>Texto:</strong> {currentSub.content}
+                                    </Typography>
+                                )}
+                                {currentSub.file_submission && (
+                                    <Link href={currentSub.file_submission} target="_blank" underline="hover">
+                                        📄 Descargar Archivo Adjunto
+                                    </Link>
+                                )}
+                            </Paper>
+
+                            <TextField
+                                autoFocus
+                                label="Nota (0-20)"
+                                type="number"
+                                fullWidth
+                                margin="normal"
+                                value={score}
+                                onChange={(e) => setScore(e.target.value)}
+                            />
+                            <TextField
+                                label="Comentarios / Feedback"
+                                multiline
+                                rows={3}
+                                fullWidth
+                                margin="normal"
+                                value={comments}
+                                onChange={(e) => setComments(e.target.value)}
+                            />
+                        </>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setOpenGradeModal(false)}>Cancelar</Button>
+                    <Button onClick={submitGrade} variant="contained" color="primary">Guardar Nota</Button>
+                </DialogActions>
+            </Dialog>
+        </Box>
+    );
 }
 
 export default GradebookPage;

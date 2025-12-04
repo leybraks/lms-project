@@ -1392,6 +1392,51 @@ class AssignmentCreateView(generics.CreateAPIView):
              
         serializer.save(lesson=lesson)
 
+# --- EN views.py (AL FINAL) ---
+
+class AssignmentSubmissionsView(generics.ListAPIView):
+    """
+    Devuelve TODAS las entregas de una tarea específica (para que el profe las vea).
+    """
+    serializer_class = SubmissionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        assignment_id = self.kwargs['assignment_id']
+        # Aquí podrías agregar validación para asegurar que el request.user es el profesor del curso
+        return Submission.objects.filter(assignment_id=assignment_id).select_related('user', 'grade')
+
+class GradeSubmissionView(APIView):
+    """
+    Permite al profesor calificar una entrega.
+    Crea o actualiza el objeto 'Grade' y cambia el estado de la Submission.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, submission_id):
+        submission = get_object_or_404(Submission, id=submission_id)
+        
+        score = request.data.get('score')
+        comments = request.data.get('comments', '')
+
+        if score is None:
+            return Response({'error': 'Se requiere una nota (score).'}, status=400)
+
+        # 1. Crear o actualizar la nota
+        # (Asumiendo que tienes el modelo Grade importado)
+        grade, created = Grade.objects.update_or_create(
+            submission=submission,
+            defaults={'score': score, 'comments': comments}
+        )
+
+        # 2. Actualizar estado de la entrega
+        submission.status = 'GRADED'
+        submission.save()
+
+        # 3. (Opcional) Notificar al alumno por WebSocket aquí...
+
+        return Response({'status': 'Calificado', 'score': score})
+
 
 
 
