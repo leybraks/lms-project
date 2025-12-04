@@ -1358,6 +1358,18 @@ class CourseStatusUpdateView(APIView):
             return Response({"status": "updated", "is_published": course.is_published})
         return Response({"error": "Dato inválido"}, status=status.HTTP_400_BAD_REQUEST)
 
+# --- EN views.py ---
+from .serializers import UserSerializer # Asegúrate de tener esto
+
+class LeaderboardView(generics.ListAPIView):
+    """
+    Devuelve los top 5 estudiantes con más XP.
+    """
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return User.objects.filter(role='STUDENT').order_by('-experience_points')[:5]
 
 
 

@@ -46,6 +46,7 @@ from .views import (
     CourseResourcesListView,
     CourseStatusUpdateView,
     ProfessorActivityFeedView,
+    LeaderboardView,
     get_me_view # Importamos esta también, ya que existe en views.py
 ) 
 
@@ -110,6 +111,7 @@ urlpatterns = [
     path('courses/<int:course_id>/gradebook/', GradebookView.as_view()),
     path('dashboard/stats/', get_dashboard_stats), # (Ya debía existir)
     path('dashboard/professor_activity/', ProfessorActivityFeedView.as_view()), # <--- ¡NUEVA!
+    path('dashboard/leaderboard/', LeaderboardView.as_view(), name='dashboard-leaderboard'),
     path('', include(router.urls)),
 ]
 if settings.DEBUG:
