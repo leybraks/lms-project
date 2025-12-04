@@ -413,6 +413,12 @@ const LessonItem = ({ lesson, isOwner, navigate, courseId, onUploadFile, onEditI
     ...(lesson.resources || []).map(r => ({ ...r, type: 'file', icon: <ArticleIcon color="info"/>, label: 'Archivo' })),
     // Aquí podrías agregar los quizzes normales si el backend los manda en la lista 'quizzes'
     // ...(lesson.quizzes || []).map(q => ({ ...q, type: 'standard_quiz', icon: <AssessmentIcon color="success"/>, label: 'Quiz Calificado' })),
+    ...(lesson.assignment ? [{ 
+        ...lesson.assignment, 
+        type: 'assignment', 
+        icon: <AssignmentIcon sx={{ color: '#ab47bc' }} />, // Mismo color morado que el botón
+        label: `Tarea: ${lesson.assignment.title}`
+    }] : [])
   ];
 
   return (
