@@ -916,23 +916,49 @@ function CourseDetailPage() {
       </Box>
 
       {/* --- MODALES --- */}
-      <Modal open={!!modalTarget.type} onClose={() => setModalTarget({ type: null, lessonId: null })}>
-        <Paper sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '90%', maxWidth: 800, maxHeight: '90vh', overflowY: 'auto', borderRadius: 2 }}>
-            {modalTarget.type === 'live_quiz' && <CreateLiveQuiz lessonId={modalTarget.lessonId} onQuizCreated={() => { setSnackbarMessage("Quiz Creado"); setSnackbarOpen(true); setModalTarget({type:null}); }} />}
-            {modalTarget.type === 'live_challenge' && <CreateLiveCodeChallenge lessonId={modalTarget.lessonId} onChallengeCreated={() => { setSnackbarMessage("Reto Creado"); setSnackbarOpen(true); setModalTarget({type:null}); }} />}
-            {modalTarget.type === 'create_assignment' && (
-                <CreateAssignmentModal 
-                    lessonId={modalTarget.lessonId} 
-                    onCreated={() => { 
-                        setSnackbarMessage("Tarea Publicada exitosamente"); 
-                        setSnackbarOpen(true); 
-                        setModalTarget({type:null}); 
-                        refreshCourseData(); // Recarga para asegurar que todo esté sincro
-                    }} 
-                />
-            )}
-        </Paper>
-      </Modal>
+        <Modal open={!!modalTarget.type} onClose={() => setModalTarget({ type: null, lessonId: null })}>
+            <Paper sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '90%', maxWidth: 800, maxHeight: '90vh', overflowY: 'auto', borderRadius: 2 }}>
+                
+                {/* 1. QUIZ EN VIVO (Corregido) */}
+                {modalTarget.type === 'live_quiz' && (
+                    <CreateLiveQuiz 
+                        lessonId={modalTarget.lessonId} 
+                        onQuizCreated={() => { 
+                            setSnackbarMessage("Quiz Creado"); 
+                            setSnackbarOpen(true); 
+                            setModalTarget({type:null}); 
+                            refreshCourseData(); // <--- ¡AGREGADO!
+                        }} 
+                    />
+                )}
+
+                {/* 2. RETO DE CÓDIGO (Corregido) */}
+                {modalTarget.type === 'live_challenge' && (
+                    <CreateLiveCodeChallenge 
+                        lessonId={modalTarget.lessonId} 
+                        onChallengeCreated={() => { 
+                            setSnackbarMessage("Reto Creado"); 
+                            setSnackbarOpen(true); 
+                            setModalTarget({type:null}); 
+                            refreshCourseData(); // <--- ¡AGREGADO!
+                        }} 
+                    />
+                )}
+
+                {/* 3. TAREA (Ya estaba bien, pero lo dejamos igual) */}
+                {modalTarget.type === 'create_assignment' && (
+                    <CreateAssignmentModal 
+                        lessonId={modalTarget.lessonId} 
+                        onCreated={() => { 
+                            setSnackbarMessage("Tarea Publicada exitosamente"); 
+                            setSnackbarOpen(true); 
+                            setModalTarget({type:null}); 
+                            refreshCourseData(); 
+                        }} 
+                    />
+                )}
+            </Paper>
+        </Modal>
 
       <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={() => setSnackbarOpen(false)} message={snackbarMessage} />
     </Box>
