@@ -8,7 +8,6 @@ import CreateLiveQuiz from '../components/CreateLiveQuiz';
 import CreateLiveCodeChallenge from '../components/CreateLiveCodeChallenge';
 import AssignmentIcon from '@mui/icons-material/Assignment'; // <--- NUEVO ICONO
 import CreateAssignmentModal from '../components/CreateAssignmentModal';
-import AssignmentIcon from '@mui/icons-material/Assignment';
 // --- Componentes de UI Material ---
 import {
   Box, Typography, CircularProgress, Alert, Button, Paper, Divider, Snackbar,
