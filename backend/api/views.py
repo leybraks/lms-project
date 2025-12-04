@@ -27,7 +27,7 @@ try:
 except Exception as e:
     print(f"ADVERTENCIA: No se pudo configurar la API de Gemini. {e}")
 # Imports de Modelos y Serializers de tu app
-from .models import Course, Enrollment, Lesson, LessonCompletion, Assignment, Submission, Quiz, User,Conversation, Message,LessonNote,ReadReceipt,CodeChallenge,Module,LiveCodeChallenge,Resource
+from .models import Course, Enrollment, Lesson, LessonCompletion, Assignment, Submission, Quiz, User,Conversation, Message,LessonNote,ReadReceipt,CodeChallenge,Module,LiveCodeChallenge,Resource,Grade
 from .serializers import CourseSerializer, CourseDetailSerializer, UserSerializer, EnrollmentSerializer, LessonSerializer, LessonCompletionSerializer, AssignmentSerializer, SubmissionSerializer, QuizSerializer,ConversationListSerializer,MessageSerializer, MessageCreateSerializer, LessonNoteSerializer, GradedItemSerializer,ReadReceiptSerializer,StudentListSerializer, Question, Choice,CodeChallengeSerializer,ModuleSerializer,ModuleChallengeSerializer,LiveCodeChallengeSerializer,ResourceSerializer
 
 # ====================================================================
