@@ -488,7 +488,6 @@ const LessonItem = ({ lesson, isOwner, navigate, courseId, onUploadFile, onEditI
                         <CloudUploadIcon fontSize="small" />
                     </IconButton>
                 </Tooltip>
-                <span style={{color: 'red', fontSize: '20px'}}>TEST</span>
                 <Tooltip title="Asignar Tarea (Entrega de Archivo/Texto)">
                     <IconButton 
                         size="small" 
