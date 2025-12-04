@@ -1370,6 +1370,28 @@ class LeaderboardView(generics.ListAPIView):
 
     def get_queryset(self):
         return User.objects.filter(role='STUDENT').order_by('-experience_points')[:5]
+    
+# --- AGREGAR AL FINAL DE VIEWS.PY ---
+
+class AssignmentCreateView(generics.CreateAPIView):
+    """
+    Permite al profesor crear una Tarea nueva asociada a una Lección.
+    """
+    serializer_class = AssignmentSerializer
+    permission_classes = [IsAuthenticated] # Idealmente IsEnrolledOrProfessor
+
+    def perform_create(self, serializer):
+        # 1. Buscamos la lección usando el ID de la URL
+        lesson_id = self.kwargs['lesson_id']
+        lesson = get_object_or_404(Lesson, id=lesson_id)
+        
+        # 2. Verificamos si ya existe una tarea (porque es OneToOne)
+        if hasattr(lesson, 'assignment'):
+             from rest_framework.exceptions import ValidationError
+             raise ValidationError("Esta lección ya tiene una tarea asignada. Edítala en su lugar.")
+             
+        # 3. Guardamos la tarea vinculada a esa lección
+        serializer.save(lesson=lesson)
 
 
 

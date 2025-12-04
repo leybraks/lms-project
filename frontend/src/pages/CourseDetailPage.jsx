@@ -6,7 +6,8 @@ import { motion } from "framer-motion";
 import { useAuth } from '../context/AuthContext';
 import CreateLiveQuiz from '../components/CreateLiveQuiz';
 import CreateLiveCodeChallenge from '../components/CreateLiveCodeChallenge';
-
+import AssignmentIcon from '@mui/icons-material/Assignment'; // <--- NUEVO ICONO
+import CreateAssignmentModal from '../components/CreateAssignmentModal';
 // --- Componentes de UI Material ---
 import {
   Box, Typography, CircularProgress, Alert, Button, Paper, Divider, Snackbar,
@@ -487,6 +488,15 @@ const LessonItem = ({ lesson, isOwner, navigate, courseId, onUploadFile, onEditI
                         <CloudUploadIcon fontSize="small" />
                     </IconButton>
                 </Tooltip>
+                <Tooltip title="Asignar Tarea (Entrega de Archivo/Texto)">
+                    <IconButton 
+                        size="small" 
+                        sx={{ color: '#ab47bc', '&:hover': {bgcolor: 'rgba(171, 71, 188, 0.1)'} }}
+                        onClick={() => onEditItem('create_assignment', lesson.id)}
+                    >
+                        <AssignmentIcon fontSize="small" />
+                    </IconButton>
+                </Tooltip>
                 {/* Input oculto para archivos */}
                 <input 
                     type="file" 
@@ -809,6 +819,9 @@ function CourseDetailPage() {
                                             else if (action === 'create_live_challenge') {
                                                 // Abrir modal de Desafío Código
                                                 setModalTarget({ type: 'live_challenge', lessonId: id });
+                                            }
+                                            else if (action === 'create_assignment') {
+                                                setModalTarget({ type: 'create_assignment', lessonId: id });
                                             } 
                                             else if (action === 'create_standard_quiz') {
                                                 // Redirigir a la página de creación de Quiz Normal (Examen)
@@ -901,6 +914,17 @@ function CourseDetailPage() {
         <Paper sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '90%', maxWidth: 800, maxHeight: '90vh', overflowY: 'auto', borderRadius: 2 }}>
             {modalTarget.type === 'live_quiz' && <CreateLiveQuiz lessonId={modalTarget.lessonId} onQuizCreated={() => { setSnackbarMessage("Quiz Creado"); setSnackbarOpen(true); setModalTarget({type:null}); }} />}
             {modalTarget.type === 'live_challenge' && <CreateLiveCodeChallenge lessonId={modalTarget.lessonId} onChallengeCreated={() => { setSnackbarMessage("Reto Creado"); setSnackbarOpen(true); setModalTarget({type:null}); }} />}
+            {modalTarget.type === 'create_assignment' && (
+                <CreateAssignmentModal 
+                    lessonId={modalTarget.lessonId} 
+                    onCreated={() => { 
+                        setSnackbarMessage("Tarea Publicada exitosamente"); 
+                        setSnackbarOpen(true); 
+                        setModalTarget({type:null}); 
+                        refreshCourseData(); // Recarga para asegurar que todo esté sincro
+                    }} 
+                />
+            )}
         </Paper>
       </Modal>
 

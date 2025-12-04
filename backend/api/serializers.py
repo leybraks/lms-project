@@ -166,6 +166,18 @@ class QuizSerializer(serializers.ModelSerializer):
         # Enviamos toda la info que el frontend necesita
         fields = ['id', 'module', 'title', 'due_date', 'max_attempts', 'questions']
 
+# ====================================================================
+# 8. ACTUALIZADO: Serializer de Tarea (Assignment)
+# ====================================================================
+class AssignmentSerializer(serializers.ModelSerializer):
+    """
+    Serializer para mostrar las instrucciones de una Tarea.
+    Ahora incluye los campos de fecha límite y edición.
+    """
+    class Meta:
+        model = Assignment
+        # ¡CAMPOS AÑADIDOS!
+        fields = ['id', 'lesson', 'title', 'description', 'due_date', 'allow_edits']
 
 # 2. Serializer de Lección (El más interno)
 class LessonSerializer(serializers.ModelSerializer):
@@ -183,6 +195,7 @@ class LessonSerializer(serializers.ModelSerializer):
     live_quizzes = QuizSerializer(many=True, read_only=True)
     live_code_challenges = LiveCodeChallengeSerializer(many=True, read_only=True)
     code_challenges = CodeChallengeSerializer(many=True, read_only=True)
+    assignment = AssignmentSerializer(read_only=True)
 
     class Meta:
         model = Lesson
@@ -193,7 +206,7 @@ class LessonSerializer(serializers.ModelSerializer):
             'next_lesson_id', 'prev_lesson_id',
             'chat_conversation',
             # Listas de contenidos
-            'resources', 'live_quizzes', 'live_code_challenges', 'code_challenges'
+            'resources', 'live_quizzes', 'live_code_challenges', 'code_challenges','assignment'
         ]
     
     def _get_adjacent_lesson(self, obj, direction='next'):
@@ -317,20 +330,9 @@ class LessonCompletionSerializer(serializers.ModelSerializer):
     class Meta:
         model = LessonCompletion
         fields = ['id', 'user', 'lesson', 'date_completed', 'lesson_id']
+        
         read_only_fields = ['user']
 
-# ====================================================================
-# 8. ACTUALIZADO: Serializer de Tarea (Assignment)
-# ====================================================================
-class AssignmentSerializer(serializers.ModelSerializer):
-    """
-    Serializer para mostrar las instrucciones de una Tarea.
-    Ahora incluye los campos de fecha límite y edición.
-    """
-    class Meta:
-        model = Assignment
-        # ¡CAMPOS AÑADIDOS!
-        fields = ['id', 'lesson', 'title', 'description', 'due_date', 'allow_edits']
 
 # 9. Serializer de Entrega (Submission)
 class SubmissionSerializer(serializers.ModelSerializer):
