@@ -44,7 +44,8 @@ import {
   Delete as DeleteIcon,
   Download as DownloadIcon,
   Grade as GradeIcon,
-  MenuBook as MenuBookIcon 
+  MenuBook as MenuBookIcon,
+  Assignment as AssignmentIcon
 } from '@mui/icons-material';
 
 // --- Helper para formatear bytes ---
