@@ -6,6 +6,7 @@ import { useTheme } from '@mui/material/styles';
 import { AnimatePresence, motion } from "framer-motion"; 
 import ExtensionIcon from '@mui/icons-material/Extension';
 import axiosInstance from '../api/axios'; // <--- IMPORTANTE
+import SchoolIcon from '@mui/icons-material/School';
 
 import { VideoCallProvider } from '../context/VideoCallContext';
 import GlobalJitsi from '../components/GlobalJitsi';
