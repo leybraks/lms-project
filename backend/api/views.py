@@ -21,6 +21,7 @@ from django.db import transaction
 from rest_framework.pagination import PageNumberPagination
 import google.generativeai as genai
 from django.conf import settings
+from rest_framework.exceptions import ValidationError
 try:
     genai.configure(api_key=settings.GEMINI_API_KEY)
 except Exception as e:
@@ -1378,19 +1379,17 @@ class AssignmentCreateView(generics.CreateAPIView):
     Permite al profesor crear una Tarea nueva asociada a una Lección.
     """
     serializer_class = AssignmentSerializer
-    permission_classes = [IsAuthenticated] # Idealmente IsEnrolledOrProfessor
+    permission_classes = [IsAuthenticated] 
 
     def perform_create(self, serializer):
-        # 1. Buscamos la lección usando el ID de la URL
         lesson_id = self.kwargs['lesson_id']
         lesson = get_object_or_404(Lesson, id=lesson_id)
         
-        # 2. Verificamos si ya existe una tarea (porque es OneToOne)
-        if hasattr(lesson, 'assignment'):
-             from rest_framework.exceptions import ValidationError
-             raise ValidationError("Esta lección ya tiene una tarea asignada. Edítala en su lugar.")
+        # Verificamos si ya existe una tarea consultando la base de datos
+        if Assignment.objects.filter(lesson=lesson).exists():
+             # Como ya importamos ValidationError arriba, lo usamos directo
+             raise ValidationError("Esta lección ya tiene una tarea asignada.")
              
-        # 3. Guardamos la tarea vinculada a esa lección
         serializer.save(lesson=lesson)
 
 
