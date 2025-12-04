@@ -508,41 +508,42 @@ class GradeSerializer(serializers.ModelSerializer):
 
 
 
-class GradedItemSerializer(serializers.ModelSerializer):  
+class GradedItemSerializer(serializers.ModelSerializer):
     """
-    Serializer para una Tarea (Assignment).
-    Muestra la entrega (Submission) y la nota (Grade) del usuario actual.
+    Serializer para el Libro de Notas del alumno.
+    Aplana la estructura para que el Frontend reciba directamente 'grade' y 'submitted_at'.
     """
-    submission = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = Assignment # La base de nuestra lista son las Tareas
-        fields = ['id', 'title', 'due_date', 'submission']
+    grade = serializers.SerializerMethodField()
+    submitted_at = serializers.SerializerMethodField()
+    type = serializers.SerializerMethodField()
 
-    def get_submission(self, obj):
-        """
-        Busca la entrega y nota solo para el usuario que hace la petición.
-        """
+    class Meta:
+        model = Assignment
+        # Estos son exactamente los campos que tu Frontend está buscando
+        fields = ['id', 'title', 'grade', 'submitted_at', 'type', 'due_date']
+
+    def get_type(self, obj):
+        return 'assignment'
+
+    def get_grade(self, obj):
+        # 1. Obtenemos el usuario que hace la petición (el alumno)
         user = self.context['request'].user
         
-        try:
-            # Busca la entrega
-            submission = Submission.objects.get(assignment=obj, user=user)
-            
-            # Prepara la data de la nota (si existe)
-            grade_data = None
-            if hasattr(submission, 'grade'):
-                grade_data = GradeSerializer(submission.grade).data
-                
-            # Devuelve un objeto con todo
-            return {
-                'status': submission.status,
-                'submitted_at': submission.submitted_at,
-                'grade': grade_data # Esto será un objeto o None
-            }
-        except Submission.DoesNotExist:
-            return None # El usuario no ha entregado esta tarea
+        # 2. Buscamos su entrega específica
+        submission = obj.submissions.filter(user=user).first()
         
+        # 3. Si existe entrega Y tiene nota, devolvemos solo el puntaje
+        if submission and hasattr(submission, 'grade'):
+            return submission.grade.score 
+        return None 
+
+    def get_submitted_at(self, obj):
+        user = self.context['request'].user
+        submission = obj.submissions.filter(user=user).first()
+        
+        if submission:
+            return submission.submitted_at
+        return None
 
 class ReadReceiptSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
