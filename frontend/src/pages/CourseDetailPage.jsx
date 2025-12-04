@@ -113,8 +113,8 @@ const StudentsTab = ({ courseId }) => {
   );
 };
 
-// 2. GESTOR DE ARCHIVOS (VISUALMENTE CORREGIDO)
-const ResourcesTab = ({ courseId, isProfessor, courseStructure = [],refreshTrigger }) => { 
+
+const ResourcesTab = ({ courseId, isProfessor, courseStructure = [], refreshTrigger }) => { 
   const [resources, setResources] = useState([]); 
   const [uploading, setUploading] = useState(false);
   
@@ -125,7 +125,7 @@ const ResourcesTab = ({ courseId, isProfessor, courseStructure = [],refreshTrigg
   // Cargar archivos
   useEffect(() => {
     if(courseId) fetchFiles();
-  }, [courseId,refreshTrigger]);
+  }, [courseId, refreshTrigger]);
 
   const fetchFiles = () => {
     axiosInstance.get(`/api/courses/${courseId}/all_resources/`)
@@ -186,7 +186,7 @@ const ResourcesTab = ({ courseId, isProfessor, courseStructure = [],refreshTrigg
             <Grid container spacing={2} alignItems="center">
                 {/* SELECTOR DE MÓDULO */}
                 <Grid item xs={12} md={5}>
-                    <FormControl fullWidth size="small" sx={{ minWidth: 200 }}> {/* <-- Ancho mínimo forzado */}
+                    <FormControl fullWidth size="small" sx={{ minWidth: 200 }}>
                         <InputLabel id="select-module-label">Seleccionar Módulo</InputLabel>
                         <Select
                             labelId="select-module-label"
@@ -206,7 +206,7 @@ const ResourcesTab = ({ courseId, isProfessor, courseStructure = [],refreshTrigg
 
                 {/* SELECTOR DE LECCIÓN */}
                 <Grid item xs={12} md={5}>
-                    <FormControl fullWidth size="small" disabled={!selectedModuleId} sx={{ minWidth: 200 }}> {/* <-- Ancho mínimo forzado */}
+                    <FormControl fullWidth size="small" disabled={!selectedModuleId} sx={{ minWidth: 200 }}>
                         <InputLabel id="select-lesson-label">Seleccionar Lección</InputLabel>
                         <Select
                             labelId="select-lesson-label"
@@ -233,7 +233,7 @@ const ResourcesTab = ({ courseId, isProfessor, courseStructure = [],refreshTrigg
                         fullWidth
                         disabled={!selectedLessonId || uploading}
                         startIcon={uploading ? <CircularProgress size={20} color="inherit"/> : <CloudUploadIcon />}
-                        sx={{ height: 40 }} // Altura fija para alinear con los inputs
+                        sx={{ height: 40 }}
                     >
                         {uploading ? "..." : "Subir"}
                         <input type="file" hidden onChange={handleUpload} />
@@ -278,13 +278,14 @@ const ResourcesTab = ({ courseId, isProfessor, courseStructure = [],refreshTrigg
                                                 size="small" 
                                                 color="primary" 
                                                 variant="outlined" 
-                                                component="span" // <--- ¡ESTO ARREGLA EL ERROR DE HYDRATION!
+                                                component="span"
                                                 sx={{ fontSize: '0.75rem', height: 22, cursor: 'default' }} 
-                                                clickable={false} // Aseguramos que no sea un botón interactivo
+                                                clickable={false}
                                             />
                                         </Box>
                                         <Typography variant="caption" color="text.secondary">
-                                            {formatBytes(file.file_size)} • {new Date(file.uploaded_at).toLocaleDateString()}
+                                            {/* --- AQUÍ ESTÁ LA CORRECCIÓN --- */}
+                                            {file.file_size || "Desconocido"} • {new Date(file.uploaded_at).toLocaleDateString()}
                                         </Typography>
                                     </Box>
                                 } 
