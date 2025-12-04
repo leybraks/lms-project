@@ -178,6 +178,7 @@ class AssignmentSerializer(serializers.ModelSerializer):
         model = Assignment
         # ¡CAMPOS AÑADIDOS!
         fields = ['id', 'lesson', 'title', 'description', 'due_date', 'allow_edits']
+        read_only_fields = ['lesson']
 
 # 2. Serializer de Lección (El más interno)
 class LessonSerializer(serializers.ModelSerializer):
